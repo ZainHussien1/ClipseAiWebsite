@@ -1,0 +1,155 @@
+import type {
+  ActiveRisingTier,
+  ClaimRecord,
+  ClaimStatus,
+  FeedResponse,
+  ItemKind,
+  LiveResponse,
+  Platform,
+  RisingResponse,
+  SourceItem,
+} from './contracts';
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
+  });
+
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg =
+      (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+        ? payload.error
+        : null) ??
+      (payload && typeof payload === 'object' && 'message' in payload && typeof payload.message === 'string'
+        ? payload.message
+        : null) ??
+      `Request failed (${res.status})`;
+    throw new ApiError(res.status, msg);
+  }
+  return payload as T;
+}
+
+export async function listSources(): Promise<SourceItem[]> {
+  const data = await requestJson<{ sources?: SourceItem[]; items?: SourceItem[] } | SourceItem[]>(
+    '/api/v1/sources',
+  );
+  if (Array.isArray(data)) return data;
+  return data.sources ?? data.items ?? [];
+}
+
+export async function createSource(input: {
+  input: string;
+  starred?: boolean;
+  groupName?: string;
+  tags?: string[];
+}): Promise<SourceItem> {
+  return requestJson<SourceItem>('/api/v1/sources', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function bulkCreateSources(input: {
+  rawLines: string;
+  groupName?: string;
+  tags?: string[];
+  starred?: boolean;
+}): Promise<{ created?: number; sources?: SourceItem[] }> {
+  return requestJson('/api/v1/sources/bulk', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateSource(
+  followId: string,
+  patch: { starred?: boolean; paused?: boolean; archived?: boolean; groupName?: string | null },
+): Promise<SourceItem> {
+  return requestJson<SourceItem>(`/api/v1/sources/${encodeURIComponent(followId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function fetchFeed(params: {
+  cursor?: string;
+  limit?: number;
+  platform?: Platform;
+  kind?: ItemKind;
+  starredOnly?: boolean;
+  q?: string;
+}): Promise<FeedResponse> {
+  const qs = new URLSearchParams();
+  if (params.cursor) qs.set('cursor', params.cursor);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.platform) qs.set('platform', params.platform);
+  if (params.kind) qs.set('kind', params.kind);
+  if (params.starredOnly) qs.set('starredOnly', 'true');
+  if (params.q) qs.set('q', params.q);
+  const query = qs.toString();
+  return requestJson<FeedResponse>(`/api/v1/feed${query ? `?${query}` : ''}`);
+}
+
+export async function fetchLive(): Promise<LiveResponse> {
+  return requestJson<LiveResponse>('/api/v1/live');
+}
+
+export async function fetchRising(params: {
+  tier?: ActiveRisingTier;
+  platform?: Platform;
+  limit?: number;
+}): Promise<RisingResponse> {
+  const qs = new URLSearchParams();
+  if (params.tier) qs.set('tier', params.tier);
+  if (params.platform) qs.set('platform', params.platform);
+  if (params.limit) qs.set('limit', String(params.limit));
+  const query = qs.toString();
+  return requestJson<RisingResponse>(`/api/v1/rising${query ? `?${query}` : ''}`);
+}
+
+export async function listClaims(): Promise<ClaimRecord[]> {
+  const data = await requestJson<{ claims?: ClaimRecord[]; items?: ClaimRecord[] } | ClaimRecord[]>(
+    '/api/v1/claims',
+  );
+  if (Array.isArray(data)) return data;
+  return data.claims ?? data.items ?? [];
+}
+
+export async function createClaim(input: {
+  itemId: string;
+  startSec?: number;
+  endSec?: number;
+  note?: string;
+}): Promise<ClaimRecord> {
+  return requestJson<ClaimRecord>('/api/v1/claims', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateClaim(
+  claimId: string,
+  patch: { status: ClaimStatus; note?: string | null },
+): Promise<ClaimRecord> {
+  return requestJson<ClaimRecord>(`/api/v1/claims/${encodeURIComponent(claimId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import {
   AppError,
   parseEnv,
@@ -13,6 +13,11 @@ import {
   createTwitchHooksRouter,
   createYouTubeHooksRouter,
 } from './hooks/index.js';
+import { createClaimsRouter } from './routes/claims.js';
+import { createFeedRouter } from './routes/feed.js';
+import { createLiveRouter } from './routes/live.js';
+import { createRisingRouter } from './routes/rising.js';
+import { createSourcesRouter } from './routes/sources.js';
 import { csrfMiddleware, securityHeadersMiddleware } from './security.js';
 import type { WorkspaceDO } from './do/workspace.js';
 
@@ -120,6 +125,43 @@ export function createApp(deps: AppDependencies = {}) {
     );
     c.set('principal', principal);
     await next();
+  });
+
+  const authMiddleware: MiddlewareHandler<{
+    Bindings: EdgeBindings;
+    Variables: EdgeVariables;
+  }> = async (c, next) => {
+    const authProvider = getAuthProvider(c.env, deps);
+    const principal = await resolvePrincipal(
+      c.env.DB,
+      authProvider,
+      c.req.header('Cf-Access-Jwt-Assertion'),
+    );
+    c.set('principal', principal);
+    await next();
+  };
+
+  app.use('/api/v1/sources', authMiddleware);
+  app.use('/api/v1/sources/*', authMiddleware);
+  app.use('/api/v1/feed', authMiddleware);
+  app.use('/api/v1/live', authMiddleware);
+  app.use('/api/v1/rising', authMiddleware);
+  app.use('/api/v1/claims', authMiddleware);
+  app.use('/api/v1/claims/*', authMiddleware);
+  app.use('/api/v1/ws', authMiddleware);
+
+  app.route('/api/v1/sources', createSourcesRouter());
+  app.route('/api/v1/feed', createFeedRouter());
+  app.route('/api/v1/live', createLiveRouter());
+  app.route('/api/v1/rising', createRisingRouter());
+  app.route('/api/v1/claims', createClaimsRouter());
+
+  app.get('/api/v1/ws', async (c) => {
+    const principal = c.get('principal');
+    const stub = c.env.WORKSPACE_DO.get(
+      c.env.WORKSPACE_DO.idFromName(principal.workspaceId),
+    );
+    return stub.fetch(c.req.raw);
   });
 
   app.get('/api/v1/me', (c) => {

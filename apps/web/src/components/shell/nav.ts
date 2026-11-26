@@ -1,4 +1,5 @@
 import {
+  ClipboardCheck,
   FileBarChart2,
   Home,
   Radio,
@@ -12,8 +13,19 @@ import {
 
 export type NavSection = 'WORKSPACE' | 'LIVE MODULE';
 
+export type AppRoutePath =
+  | '/'
+  | '/feed'
+  | '/rising'
+  | '/sources'
+  | '/my-work'
+  | '/clips'
+  | '/reports'
+  | '/settings'
+  | '/live';
+
 export interface NavItem {
-  to: '/' | '/feed' | '/rising' | '/sources' | '/clips' | '/reports' | '/settings' | '/live';
+  to: AppRoutePath;
   label: string;
   section: NavSection;
   icon: LucideIcon;
@@ -36,7 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Feed',
     section: 'WORKSPACE',
     icon: Rss,
-    phaseLabel: 'Phase 2–3 pending',
+    phaseLabel: 'Phase 3 active',
     description: 'Unified creator upload & stream feed with first-seen latency stamps.',
   },
   {
@@ -44,7 +56,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Rising',
     section: 'WORKSPACE',
     icon: TrendingUp,
-    phaseLabel: 'Phase 3 pending',
+    phaseLabel: 'Phase 3 active',
     description: 'Velocity & engagement breakout detector with hysteresis.',
   },
   {
@@ -52,8 +64,16 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Sources',
     section: 'WORKSPACE',
     icon: Users,
-    phaseLabel: 'Phase 3 pending',
+    phaseLabel: 'Phase 3 active',
     description: 'Tracked YouTube, Twitch, and Kick creator channels.',
+  },
+  {
+    to: '/my-work',
+    label: 'My Work',
+    section: 'WORKSPACE',
+    icon: ClipboardCheck,
+    phaseLabel: 'Phase 3 active',
+    description: 'Active item & time-range claims with optimistic workflow transitions.',
   },
   {
     to: '/clips',
@@ -85,7 +105,7 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'LIVE MODULE',
     icon: Radio,
     badge: 'LIVE',
-    phaseLabel: 'Phase 3–4 pending',
+    phaseLabel: 'Phase 3 active',
     description: 'Real-time live stream monitor and viewer/clip moment alerts.',
   },
 ];

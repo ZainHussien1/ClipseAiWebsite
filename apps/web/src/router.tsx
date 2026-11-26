@@ -1,21 +1,52 @@
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from '@tanstack/react-router';
-import { Suspense, lazy } from 'react';
+import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import { Suspense, lazy, type ComponentType } from 'react';
 import { AppShell } from './components/shell/AppShell';
-import type { NavItem } from './components/shell/nav';
+import type { AppRoutePath } from './components/shell/nav';
 import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
 import { OverviewPage } from './routes/OverviewPage';
 
+const SourcesPage = lazy(() =>
+  import('./routes/SourcesPage').then((m) => ({ default: m.SourcesPage })),
+);
+const FeedPage = lazy(() =>
+  import('./routes/FeedPage').then((m) => ({ default: m.FeedPage })),
+);
+const LivePage = lazy(() =>
+  import('./routes/LivePage').then((m) => ({ default: m.LivePage })),
+);
+const RisingPage = lazy(() =>
+  import('./routes/RisingPage').then((m) => ({ default: m.RisingPage })),
+);
+const MyWorkPage = lazy(() =>
+  import('./routes/MyWorkPage').then((m) => ({ default: m.MyWorkPage })),
+);
 const PendingModulePage = lazy(() =>
-  import('./routes/PendingModulePage').then((mod) => ({
-    default: mod.PendingModulePage,
-  })),
+  import('./routes/PendingModulePage').then((m) => ({ default: m.PendingModulePage })),
 );
 
-function PendingWrapper({ path, name }: { path: NavItem['to']; name: string }) {
+function LazyRoute({
+  name,
+  Component,
+}: {
+  name: string;
+  Component: ComponentType;
+}) {
+  return (
+    <RouteErrorBoundary routeName={name}>
+      <Suspense
+        fallback={
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-[12px] text-[var(--text-secondary)]">
+            Loading {name}...
+          </div>
+        }
+      >
+        <Component />
+      </Suspense>
+    </RouteErrorBoundary>
+  );
+}
+
+function PendingWrapper({ path, name }: { path: AppRoutePath; name: string }) {
   return (
     <RouteErrorBoundary routeName={name}>
       <Suspense
@@ -31,9 +62,7 @@ function PendingWrapper({ path, name }: { path: NavItem['to']; name: string }) {
   );
 }
 
-const rootRoute = createRootRoute({
-  component: AppShell,
-});
+const rootRoute = createRootRoute({ component: AppShell });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -48,25 +77,31 @@ const indexRoute = createRoute({
 const feedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/feed',
-  component: () => <PendingWrapper path="/feed" name="Feed" />,
+  component: () => <LazyRoute name="Feed" Component={FeedPage} />,
 });
 
 const liveRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/live',
-  component: () => <PendingWrapper path="/live" name="Live Now" />,
+  component: () => <LazyRoute name="Live Now" Component={LivePage} />,
 });
 
 const risingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/rising',
-  component: () => <PendingWrapper path="/rising" name="Rising" />,
+  component: () => <LazyRoute name="Rising" Component={RisingPage} />,
 });
 
 const sourcesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sources',
-  component: () => <PendingWrapper path="/sources" name="Sources" />,
+  component: () => <LazyRoute name="Sources" Component={SourcesPage} />,
+});
+
+const myWorkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/my-work',
+  component: () => <LazyRoute name="My Work" Component={MyWorkPage} />,
 });
 
 const clipsRoute = createRoute({
@@ -93,6 +128,7 @@ const routeTree = rootRoute.addChildren([
   liveRoute,
   risingRoute,
   sourcesRoute,
+  myWorkRoute,
   clipsRoute,
   reportsRoute,
   settingsRoute,
