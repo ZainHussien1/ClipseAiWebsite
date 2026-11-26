@@ -17,8 +17,14 @@ const LivePage = lazy(() =>
 const RisingPage = lazy(() =>
   import('./routes/RisingPage').then((m) => ({ default: m.RisingPage })),
 );
+const AlertsPage = lazy(() =>
+  import('./routes/AlertsPage').then((m) => ({ default: m.AlertsPage })),
+);
 const MyWorkPage = lazy(() =>
   import('./routes/MyWorkPage').then((m) => ({ default: m.MyWorkPage })),
+);
+const NotificationsPage = lazy(() =>
+  import('./routes/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
 );
 const PendingModulePage = lazy(() =>
   import('./routes/PendingModulePage').then((m) => ({ default: m.PendingModulePage })),
@@ -92,6 +98,12 @@ const risingRoute = createRoute({
   component: () => <LazyRoute name="Rising" Component={RisingPage} />,
 });
 
+const alertsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/alerts',
+  component: () => <LazyRoute name="Alerts" Component={AlertsPage} />,
+});
+
 const sourcesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sources',
@@ -102,6 +114,12 @@ const myWorkRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/my-work',
   component: () => <LazyRoute name="My Work" Component={MyWorkPage} />,
+});
+
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/notifications',
+  component: () => <LazyRoute name="Notifications" Component={NotificationsPage} />,
 });
 
 const clipsRoute = createRoute({
@@ -127,8 +145,10 @@ const routeTree = rootRoute.addChildren([
   feedRoute,
   liveRoute,
   risingRoute,
+  alertsRoute,
   sourcesRoute,
   myWorkRoute,
+  notificationsRoute,
   clipsRoute,
   reportsRoute,
   settingsRoute,

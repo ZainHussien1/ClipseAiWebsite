@@ -1,4 +1,5 @@
-import { Menu, RefreshCw, Search } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { Bell, Menu, RefreshCw, Search } from 'lucide-react';
 import type { HealthSnapshot, SystemStatus } from '../../lib/api';
 import { Kbd } from '../ui/Kbd';
 import { StatusPill } from '../ui/StatusPill';
@@ -6,6 +7,7 @@ import { StatusPill } from '../ui/StatusPill';
 interface TopBarProps {
   status: SystemStatus;
   health: HealthSnapshot | undefined;
+  unreadCount: number;
   isFetchingHealth: boolean;
   onRefreshHealth: () => void;
   onOpenCommandPalette: () => void;
@@ -15,6 +17,7 @@ interface TopBarProps {
 export function TopBar({
   status,
   health,
+  unreadCount,
   isFetchingHealth,
   onRefreshHealth,
   onOpenCommandPalette,
@@ -45,12 +48,27 @@ export function TopBar({
         </button>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <StatusPill
           status={status}
           fetchedAtMs={health?.fetchedAtMs}
           source={health?.source ?? '/api/v1/health'}
         />
+        <Link
+          to="/notifications"
+          aria-label={`Notifications (${unreadCount} unread)`}
+          className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+        >
+          <Bell className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+          {unreadCount > 0 && (
+            <span
+              className="absolute right-2 top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold"
+              style={{ backgroundColor: 'var(--danger)', color: 'var(--text-strong)' }}
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </Link>
         <button
           type="button"
           onClick={onRefreshHealth}

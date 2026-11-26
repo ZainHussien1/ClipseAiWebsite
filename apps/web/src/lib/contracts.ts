@@ -4,6 +4,11 @@ export type RisingTier = 'none' | 'rising' | 'breakout' | 'viral';
 export type ActiveRisingTier = Exclude<RisingTier, 'none'>;
 export type ClaimStatus = 'New' | 'Claimed' | 'Clipped' | 'Skipped';
 
+export type AlertType = 'rising' | 'breakout' | 'viral' | 'live_moment' | 'vod_ready';
+export type AlertConfidence = 'low' | 'medium' | 'high';
+export type NotificationTier = 'P1' | 'P2' | 'P3';
+export type NotificationChannel = 'discord' | 'webpush' | 'in_app';
+
 export interface SourceRule {
   minRisingLevel: ActiveRisingTier;
   notifyLive: boolean;
@@ -120,4 +125,54 @@ export interface ClaimRecord {
   note: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AlertItem {
+  id: string;
+  itemId: string;
+  accountHandle: string;
+  accountDisplayName: string;
+  platform: Platform;
+  title: string;
+  url: string;
+  type: AlertType;
+  confidence: AlertConfidence;
+  score: number;
+  reason: string;
+  evidence: Record<string, unknown>;
+  userVote: boolean | null;
+  remindedAt: string | null;
+  createdAt: string;
+  source: string;
+  ageSeconds: number;
+}
+
+export interface NotificationRecord {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  alertId: string | null;
+  tier: NotificationTier;
+  channel: NotificationChannel;
+  title: string;
+  body: string;
+  readAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPrefs {
+  hourlyBudget: number;
+  quietStartHour: number | null;
+  quietEndHour: number | null;
+  timezone: string;
+  snoozeUntil: string | null;
+}
+
+export interface PushSubscriptionInput {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
 }

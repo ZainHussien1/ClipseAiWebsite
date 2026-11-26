@@ -70,10 +70,10 @@ flowchart LR
 | P2.2 | Webhooks, 2 queues, reconcilers, governor | ingestion | P2.1 | `apps/edge/hooks`, `apps/engine` | Forgery/replay/out-of-order tests | High | done |
 | P3.1 | Sources, Feed, Live, Rising, Claims API | backend | P2.2 | `apps/edge`, `packages/core` | Atomic claim overlap + IDOR tests | Med | done |
 | P3.2 | Core UI (Sources, Feed, Live, Claims) | frontend | P1.3, P3.1 | `apps/web` | Playwright 3-engine + mobile E2E | Med | done |
-| P4.1 | Live Moments, VOD-ready, rules, push/Discord | signals | P3.1 | `packages/core`, `apps/engine` | Replay harness + escalation tests | Med | in_progress |
-| P4.2 | Notification center, PWA push, votes UI | frontend | P4.1 | `apps/web` | Push/offline/vote E2E pass | Med | in_progress |
-| P5.1 | Clip Log, Our channels, ROI, Scorecard, Report | backend | P4.1 | `packages/core`, `apps/edge`, `apps/engine` | Truth audit + export tests | Med | pending |
-| P5.2 | Clip Log, ROI, Scorecard, Reports, Settings UI | frontend | P5.1 | `apps/web` | Full flow E2E + zero mock data | Low | pending |
+| P4.1 | Live Moments, VOD-ready, rules, push/Discord | signals | P3.1 | `packages/core`, `apps/engine` | Replay harness + escalation tests | Med | done |
+| P4.2 | Notification center, PWA push, votes UI | frontend | P4.1 | `apps/web` | Push/offline/vote E2E pass | Med | done |
+| P5.1 | Clip Log, Our channels, ROI, Scorecard, Report | backend | P4.1 | `packages/core`, `apps/edge`, `apps/engine` | Truth audit + export tests | Med | in_progress |
+| P5.2 | Clip Log, ROI, Scorecard, Reports, Settings UI | frontend | P5.1 | `apps/web` | Full flow E2E + zero mock data | Low | in_progress |
 | P6.1 | Security/perf/truth audit, DR drill, 24h soak | security, qa, perf | P5.2 | `docs/RUNBOOK.md`, tests | Zero defects, soak report, RPO/RTO | High | pending |
 | P7.1 | Prod deploy, smoke test, Discord alerts | platform, lead | P6.1 | `wrangler.*`, `docs/RUNBOOK.md` | Gradual rollout + prod smoke pass | Med | pending |
 

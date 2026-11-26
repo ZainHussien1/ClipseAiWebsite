@@ -1,11 +1,15 @@
 import type {
   ActiveRisingTier,
+  AlertItem,
   ClaimRecord,
   ClaimStatus,
   FeedResponse,
   ItemKind,
   LiveResponse,
+  NotificationPrefs,
+  NotificationRecord,
   Platform,
+  PushSubscriptionInput,
   RisingResponse,
   SourceItem,
 } from './contracts';
@@ -151,5 +155,68 @@ export async function updateClaim(
   return requestJson<ClaimRecord>(`/api/v1/claims/${encodeURIComponent(claimId)}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
+  });
+}
+
+export async function listAlerts(): Promise<AlertItem[]> {
+  const data = await requestJson<{ alerts?: AlertItem[]; items?: AlertItem[] } | AlertItem[]>(
+    '/api/v1/alerts',
+  );
+  if (Array.isArray(data)) return data;
+  return data.alerts ?? data.items ?? [];
+}
+
+export async function voteAlert(alertId: string, useful: boolean): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/alerts/${encodeURIComponent(alertId)}/vote`, {
+    method: 'POST',
+    body: JSON.stringify({ useful }),
+  });
+}
+
+export async function listNotifications(): Promise<{
+  notifications: NotificationRecord[];
+  prefs?: NotificationPrefs;
+}> {
+  const data = await requestJson<
+    | { notifications?: NotificationRecord[]; items?: NotificationRecord[]; prefs?: NotificationPrefs }
+    | NotificationRecord[]
+  >('/api/v1/notifications');
+  if (Array.isArray(data)) return { notifications: data };
+  return {
+    notifications: data.notifications ?? data.items ?? [],
+    prefs: data.prefs,
+  };
+}
+
+export async function markNotificationRead(id: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, {
+    method: 'POST',
+  });
+}
+
+export async function updateNotificationPrefs(
+  prefs: NotificationPrefs,
+): Promise<NotificationPrefs> {
+  return requestJson<NotificationPrefs>('/api/v1/notifications/prefs', {
+    method: 'PUT',
+    body: JSON.stringify(prefs),
+  });
+}
+
+export async function registerPushSubscription(
+  sub: PushSubscriptionInput,
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>('/api/v1/notifications/push', {
+    method: 'POST',
+    body: JSON.stringify(sub),
+  });
+}
+
+export async function updateDiscordWebhook(
+  webhookUrl: string | null,
+): Promise<{ configured: boolean }> {
+  return requestJson<{ configured: boolean }>('/api/v1/notifications/discord', {
+    method: 'PUT',
+    body: JSON.stringify({ webhookUrl }),
   });
 }

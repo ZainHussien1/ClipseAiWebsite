@@ -13,9 +13,11 @@ import {
   createTwitchHooksRouter,
   createYouTubeHooksRouter,
 } from './hooks/index.js';
+import { createAlertsRouter } from './routes/alerts.js';
 import { createClaimsRouter } from './routes/claims.js';
 import { createFeedRouter } from './routes/feed.js';
 import { createLiveRouter } from './routes/live.js';
+import { createNotificationsRouter } from './routes/notifications.js';
 import { createRisingRouter } from './routes/rising.js';
 import { createSourcesRouter } from './routes/sources.js';
 import { csrfMiddleware, securityHeadersMiddleware } from './security.js';
@@ -35,6 +37,7 @@ export interface EdgeBindings {
   YOUTUBE_WEBSUB_SECRET?: string;
   TWITCH_EVENTSUB_SECRET?: string;
   KICK_PUBLIC_KEY?: string;
+  WEBHOOK_ENCRYPTION_KEY?: string;
 }
 
 export interface EdgeVariables {
@@ -148,6 +151,10 @@ export function createApp(deps: AppDependencies = {}) {
   app.use('/api/v1/rising', authMiddleware);
   app.use('/api/v1/claims', authMiddleware);
   app.use('/api/v1/claims/*', authMiddleware);
+  app.use('/api/v1/alerts', authMiddleware);
+  app.use('/api/v1/alerts/*', authMiddleware);
+  app.use('/api/v1/notifications', authMiddleware);
+  app.use('/api/v1/notifications/*', authMiddleware);
   app.use('/api/v1/ws', authMiddleware);
 
   app.route('/api/v1/sources', createSourcesRouter());
@@ -155,6 +162,8 @@ export function createApp(deps: AppDependencies = {}) {
   app.route('/api/v1/live', createLiveRouter());
   app.route('/api/v1/rising', createRisingRouter());
   app.route('/api/v1/claims', createClaimsRouter());
+  app.route('/api/v1/alerts', createAlertsRouter());
+  app.route('/api/v1/notifications', createNotificationsRouter());
 
   app.get('/api/v1/ws', async (c) => {
     const principal = c.get('principal');

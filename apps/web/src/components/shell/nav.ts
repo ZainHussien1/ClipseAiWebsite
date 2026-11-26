@@ -1,4 +1,6 @@
 import {
+  Bell,
+  BellRing,
   ClipboardCheck,
   FileBarChart2,
   Home,
@@ -17,8 +19,10 @@ export type AppRoutePath =
   | '/'
   | '/feed'
   | '/rising'
+  | '/alerts'
   | '/sources'
   | '/my-work'
+  | '/notifications'
   | '/clips'
   | '/reports'
   | '/settings'
@@ -60,6 +64,14 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'Velocity & engagement breakout detector with hysteresis.',
   },
   {
+    to: '/alerts',
+    label: 'Alerts',
+    section: 'WORKSPACE',
+    icon: BellRing,
+    phaseLabel: 'Phase 4 active',
+    description: 'Evidence-backed Rising, Live Moment, and VOD-ready alerts with voting.',
+  },
+  {
     to: '/sources',
     label: 'Sources',
     section: 'WORKSPACE',
@@ -74,6 +86,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ClipboardCheck,
     phaseLabel: 'Phase 3 active',
     description: 'Active item & time-range claims with optimistic workflow transitions.',
+  },
+  {
+    to: '/notifications',
+    label: 'Notifications',
+    section: 'WORKSPACE',
+    icon: Bell,
+    phaseLabel: 'Phase 4 active',
+    description: 'Notification inbox, quiet hours, hourly budget, Discord, and Web Push.',
   },
   {
     to: '/clips',

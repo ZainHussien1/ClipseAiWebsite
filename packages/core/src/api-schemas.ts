@@ -209,3 +209,112 @@ export const claimRecordSchema = z.object({
   updatedAt: z.string(),
 });
 export type ClaimRecord = z.infer<typeof claimRecordSchema>;
+
+// ============================================================================
+// Phase 4: Alerts, Votes, Notifications, Preferences, Push & Discord
+// ============================================================================
+
+export const alertTypeSchema = z.enum([
+  'rising',
+  'breakout',
+  'viral',
+  'live_moment',
+  'vod_ready',
+]);
+export type AlertType = z.infer<typeof alertTypeSchema>;
+
+export const alertConfidenceSchema = z.enum(['low', 'medium', 'high']);
+export type AlertConfidence = z.infer<typeof alertConfidenceSchema>;
+
+export const alertVoteSchema = z.object({
+  useful: z.boolean(),
+});
+export type AlertVoteInput = z.infer<typeof alertVoteSchema>;
+
+export const alertItemSchema = z.object({
+  id: z.string(),
+  itemId: z.string(),
+  accountHandle: z.string(),
+  accountDisplayName: z.string(),
+  platform: platformSchema,
+  title: z.string(),
+  url: z.string(),
+  type: alertTypeSchema,
+  confidence: alertConfidenceSchema,
+  score: z.number(),
+  reason: z.string(),
+  evidence: z.record(z.unknown()),
+  userVote: z.boolean().nullable(),
+  remindedAt: z.string().nullable(),
+  createdAt: z.string(),
+  source: z.string(),
+  ageSeconds: z.number().int().nonnegative(),
+});
+export type AlertItem = z.infer<typeof alertItemSchema>;
+
+export const notificationTierSchema = z.enum(['P1', 'P2', 'P3']);
+export type NotificationTier = z.infer<typeof notificationTierSchema>;
+
+export const notificationChannelSchema = z.enum(['discord', 'webpush', 'in_app']);
+export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
+
+export const notificationSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  userId: z.string(),
+  alertId: z.string().nullable(),
+  tier: notificationTierSchema,
+  channel: notificationChannelSchema,
+  title: z.string(),
+  body: z.string(),
+  readAt: z.string().nullable(),
+  deliveredAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type NotificationRecord = z.infer<typeof notificationSchema>;
+
+export const notificationPrefsSchema = z
+  .object({
+    hourlyBudget: z.number().int().min(1).max(100).default(10),
+    quietStartHour: z.number().int().min(0).max(23).nullable().default(null),
+    quietEndHour: z.number().int().min(0).max(23).nullable().default(null),
+    timezone: z.string().trim().min(1).max(64).default('UTC'),
+    snoozeUntil: z.string().datetime().nullable().default(null),
+  })
+  .refine(
+    (v) =>
+      (v.quietStartHour === null && v.quietEndHour === null) ||
+      (v.quietStartHour !== null && v.quietEndHour !== null),
+    { message: 'Both quietStartHour and quietEndHour must be set or both null' },
+  );
+export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
+
+export const pushSubscriptionSchema = z.object({
+  endpoint: z
+    .string()
+    .trim()
+    .url()
+    .refine((u) => u.startsWith('https://'), {
+      message: 'Push endpoint must use https://',
+    }),
+  keys: z.object({
+    p256dh: z.string().trim().min(16).max(256),
+    auth: z.string().trim().min(8).max(128),
+  }),
+});
+export type PushSubscriptionInput = z.infer<typeof pushSubscriptionSchema>;
+
+export const DISCORD_WEBHOOK_REGEX =
+  /^https:\/\/discord\.com\/api\/webhooks\/\d{10,30}\/[A-Za-z0-9._-]{20,128}$/;
+
+export const discordWebhookConfigSchema = z.object({
+  webhookUrl: z
+    .string()
+    .trim()
+    .regex(
+      DISCORD_WEBHOOK_REGEX,
+      'Must be a valid https://discord.com/api/webhooks/{id}/{token} URL',
+    )
+    .nullable(),
+});
+export type DiscordWebhookConfigInput = z.infer<typeof discordWebhookConfigSchema>;

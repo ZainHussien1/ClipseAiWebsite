@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Outlet } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchHealth, type SystemStatus } from '../../lib/api';
+import { listNotifications } from '../../lib/api-v1';
 import { useOnlineStatus } from '../../lib/useOnlineStatus';
 import { CommandPalette } from './CommandPalette';
 import { MobileNav } from './MobileNav';
@@ -20,6 +21,15 @@ export function AppShell() {
     refetchInterval: 30_000,
     retry: 1,
   });
+
+  const notifQuery = useQuery({
+    queryKey: ['notifications'],
+    queryFn: listNotifications,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+
+  const unreadCount = (notifQuery.data?.notifications ?? []).filter((n) => !n.readAt).length;
 
   const effectiveStatus: SystemStatus = !isOnline
     ? 'offline'
@@ -48,6 +58,7 @@ export function AppShell() {
         <TopBar
           status={effectiveStatus}
           health={healthQuery.data}
+          unreadCount={unreadCount}
           isFetchingHealth={healthQuery.isFetching}
           onRefreshHealth={refreshHealth}
           onOpenCommandPalette={() => setPaletteOpen(true)}
