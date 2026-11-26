@@ -47,7 +47,8 @@
   "services": [
     {
       "binding": "ENGINE",
-      "service": "clipse-radar-engine"
+      "service": "clipse-radar-engine",
+      "entrypoint": "EngineEntrypoint"
     }
   ],
   "vars": {

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { ClaimModal } from '../components/ui/ClaimModal';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ProviderStatusBar } from '../components/ui/ProviderStatusBar';
 import { fetchLive } from '../lib/api-v1';
 import { formatAgeSeconds, formatCount, formatDurationSince, safeExternalUrl } from '../lib/url';
 
@@ -89,6 +90,8 @@ export function LivePage() {
           {wsConnected ? 'Realtime WS' : 'Polling fallback (15s)'}
         </span>
       </div>
+
+      <ProviderStatusBar />
 
       {liveQuery.isLoading ? (
         <Card className="p-6 text-[12px] text-[var(--text-secondary)]">Checking live streams...</Card>

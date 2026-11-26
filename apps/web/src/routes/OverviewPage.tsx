@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Activity, ArrowRight, Radio, Rss, ShieldCheck, TrendingUp, Users } from 'lucide-react';
+import { Activity, ArrowRight, Rss, ShieldCheck } from 'lucide-react';
 import { NAV_ITEMS } from '../components/shell/nav';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ProviderStatusBar } from '../components/ui/ProviderStatusBar';
 import { StatusPill } from '../components/ui/StatusPill';
 import { fetchHealth, fetchMe, type HealthSnapshot, type PrincipalSnapshot } from '../lib/api';
 import { useRelativeAge } from '../lib/useRelativeAge';
@@ -30,7 +31,7 @@ function HealthAuthCard({
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-[var(--accent)]" strokeWidth={1.5} aria-hidden="true" />
           <h2 className="text-[14px] font-semibold text-[var(--text-strong)]">
-            System Health &amp; Access Identity
+            System Health &amp; Identity
           </h2>
         </div>
         <StatusPill
@@ -70,7 +71,7 @@ function HealthAuthCard({
           <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-[var(--accent)]" strokeWidth={1.5} />
-              Cloudflare Access
+              Auth ({health?.authMode ?? 'session'})
             </span>
             <span>{me?.source ?? '/api/v1/me'}</span>
           </div>
@@ -98,6 +99,10 @@ function HealthAuthCard({
           </dl>
         </div>
       </div>
+
+      <div className="mt-4 border-t border-[var(--divider)] pt-3">
+        <ProviderStatusBar />
+      </div>
     </Card>
   );
 }
@@ -123,14 +128,14 @@ export function OverviewPage() {
       <div className="hero-surface flex flex-col justify-between gap-4 rounded-xl border border-[var(--border)] p-5 sm:flex-row sm:items-center sm:p-6">
         <div className="max-w-xl">
           <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0c1519]/80">
-            CLIPSE RADAR · PHASE 1 FOUNDATION
+            CLIPSE RADAR · CREATOR MONITORING
           </div>
           <h1 className="mt-1 text-[22px] font-bold leading-tight tracking-tight text-[#0c1519] sm:text-[24px]">
             Creator monitoring &amp; live signal workspace
           </h1>
           <p className="mt-1.5 text-[12.5px] font-medium text-[#0c1519]/85">
             Track YouTube, Twitch, and Kick uploads, detect live moments, and coordinate team
-            claims without fabricated metrics.
+            claims with real provider data.
           </p>
         </div>
         <Link
@@ -138,7 +143,7 @@ export function OverviewPage() {
           className="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-[var(--text-strong)]"
           style={{ backgroundColor: 'var(--hero-btn)' }}
         >
-          <span>View Sources</span>
+          <span>Add Sources</span>
           <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
         </Link>
       </div>
@@ -182,24 +187,16 @@ export function OverviewPage() {
 
       <EmptyState
         icon={Rss}
-        badge="Phase 1 Empty State"
-        title="No tracked sources or live signals yet"
-        description="Channel ingestion, webhook processing, and live stream tracking are scheduled for Phases 2 and 3. Connect your workspace sources once ingestion lands."
+        title="Ready to track real creators"
+        description="Add a YouTube channel in Sources (no API key required for public RSS feeds) and click Sync Now to populate your Feed."
         action={
-          <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] text-[var(--text-secondary)]">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1">
-              <Users className="h-3.5 w-3.5 text-[var(--accent)]" strokeWidth={1.5} />
-              Sources: Phase 3
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1">
-              <Radio className="h-3.5 w-3.5 text-[var(--danger)]" strokeWidth={1.5} />
-              Live Now: Phase 3–4
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1">
-              <TrendingUp className="h-3.5 w-3.5 text-[var(--success)]" strokeWidth={1.5} />
-              Rising: Phase 3
-            </span>
-          </div>
+          <Link
+            to="/sources"
+            className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent-tint)] px-4 text-[12px] font-semibold text-[var(--text-strong)]"
+          >
+            Go to Sources
+            <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </Link>
         }
       />
     </div>

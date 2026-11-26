@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { Bell, Menu, RefreshCw, Search } from 'lucide-react';
+import { Bell, LogOut, Menu, RefreshCw, Search } from 'lucide-react';
 import type { HealthSnapshot, SystemStatus } from '../../lib/api';
 import { Kbd } from '../ui/Kbd';
 import { StatusPill } from '../ui/StatusPill';
@@ -8,8 +8,10 @@ interface TopBarProps {
   status: SystemStatus;
   health: HealthSnapshot | undefined;
   unreadCount: number;
+  showSignOut: boolean;
   isFetchingHealth: boolean;
   onRefreshHealth: () => void;
+  onSignOut: () => void;
   onOpenCommandPalette: () => void;
   onOpenMobileDrawer: () => void;
 }
@@ -18,8 +20,10 @@ export function TopBar({
   status,
   health,
   unreadCount,
+  showSignOut,
   isFetchingHealth,
   onRefreshHealth,
+  onSignOut,
   onOpenCommandPalette,
   onOpenMobileDrawer,
 }: TopBarProps) {
@@ -82,6 +86,17 @@ export function TopBar({
             aria-hidden="true"
           />
         </button>
+        {showSignOut && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            aria-label="Sign out"
+            className="flex min-h-[44px] items-center gap-1.5 rounded-lg px-2.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          >
+            <LogOut className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+            <span className="hidden sm:inline">Sign out</span>
+          </button>
+        )}
       </div>
     </header>
   );

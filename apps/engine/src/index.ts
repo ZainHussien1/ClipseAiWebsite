@@ -1,7 +1,13 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
-import { TokenBucketQuotaGovernor } from '@clipse/core';
+import {
+  TokenBucketQuotaGovernor,
+  YouTubeProvider,
+  YouTubePublicProvider,
+} from '@clipse/core';
 import { processIngestBatch } from './ingest.js';
 import { processNotifyBatch, processUnclaimedEscalations } from './notify.js';
+import { reconcilePlatformAccounts } from './reconciler.js';
+import { syncPlatformAccount, type SyncAccountInput, type SyncAccountResult } from './sync.js';
 
 export interface EngineEnv {
   DB: D1Database;
@@ -12,6 +18,11 @@ export interface EngineEnv {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  YOUTUBE_API_KEY?: string;
+  TWITCH_CLIENT_ID?: string;
+  TWITCH_CLIENT_SECRET?: string;
+  KICK_CLIENT_ID?: string;
+  KICK_CLIENT_SECRET?: string;
 }
 
 const quotaGovernor = new TokenBucketQuotaGovernor();
@@ -23,6 +34,17 @@ export class EngineEntrypoint extends WorkerEntrypoint<EngineEnv> {
 
   async quotaSnapshot(platform: 'youtube' | 'twitch' | 'kick') {
     return quotaGovernor.snapshot(platform);
+  }
+
+  async syncAccount(input: SyncAccountInput): Promise<SyncAccountResult> {
+    try {
+      return await syncPlatformAccount(this.env.DB, this.env, input, {
+        quota: quotaGovernor,
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`Engine syncAccount(${input.platform}:${input.externalId}): ${detail}`);
+    }
   }
 }
 
@@ -41,7 +63,6 @@ export default {
         }
         return;
       }
-      // On partial failure, ack valid/non-failing or retry batch conservatively
       for (const message of batch.messages) {
         message.retry();
       }
@@ -76,9 +97,29 @@ export default {
     env: EngineEnv,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    // Prune expired webhook_dedupe rows to keep D1 storage bounded
     const nowIso = new Date().toISOString();
     await env.DB.prepare('DELETE FROM webhook_dedupe WHERE expires_at <= ?').bind(nowIso).run();
     await processUnclaimedEscalations(env.DB, env, nowIso);
+
+    const ytRows = await env.DB.prepare(
+      `SELECT pa.external_id, MAX(f.starred) AS starred
+       FROM platform_accounts pa
+       INNER JOIN follows f ON f.account_id = pa.id
+       WHERE pa.platform = 'youtube'
+       GROUP BY pa.id
+       LIMIT 25`,
+    ).all<{ external_id: string; starred: number }>();
+
+    const accounts = (ytRows.results ?? []).map((r) => ({
+      externalId: r.external_id,
+      starred: r.starred === 1,
+    }));
+
+    if (accounts.length > 0) {
+      const ytProvider = env.YOUTUBE_API_KEY
+        ? new YouTubeProvider({ apiKey: env.YOUTUBE_API_KEY, quota: quotaGovernor })
+        : new YouTubePublicProvider();
+      await reconcilePlatformAccounts(env.DB, ytProvider, accounts, quotaGovernor, { nowIso });
+    }
   },
 };

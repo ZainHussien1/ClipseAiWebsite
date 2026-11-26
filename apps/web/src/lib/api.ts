@@ -4,11 +4,19 @@ export interface HealthSnapshot {
   status: SystemStatus;
   rawStatus: string;
   environment: string | null;
+  authMode: 'access' | 'session' | null;
   serverTime: string | null;
   fetchedAtMs: number;
   latencyMs: number;
   source: string;
   detail: string | null;
+}
+
+export interface AuthStatusSnapshot {
+  mode: 'access' | 'session';
+  authenticated: boolean;
+  email: string | null;
+  hasWorkspace: boolean;
 }
 
 export interface PrincipalSnapshot {
@@ -25,14 +33,18 @@ export interface PrincipalSnapshot {
 
 const REQUEST_TIMEOUT_MS = 6000;
 
-async function fetchWithTimeout(url: string): Promise<Response> {
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     return await fetch(url, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
       credentials: 'same-origin',
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        ...init?.headers,
+      },
       signal: controller.signal,
     });
   } finally {
@@ -67,10 +79,13 @@ export async function fetchHealth(): Promise<HealthSnapshot> {
     const latencyMs = Math.round(performance.now() - start);
     const payload = asRecord(await res.json().catch(() => null));
     const rawStatus = asString(payload?.['status']) ?? (res.ok ? 'ok' : `http_${res.status}`);
+    const rawAuthMode = asString(payload?.['authMode']);
+    const authMode = rawAuthMode === 'access' || rawAuthMode === 'session' ? rawAuthMode : null;
     return {
       status: mapHealthStatus(rawStatus, res.ok),
       rawStatus,
       environment: asString(payload?.['environment']),
+      authMode,
       serverTime: asString(payload?.['timestamp']) ?? asString(payload?.['time']),
       fetchedAtMs: Date.now(),
       latencyMs,
@@ -84,6 +99,7 @@ export async function fetchHealth(): Promise<HealthSnapshot> {
       status: 'offline',
       rawStatus: 'unreachable',
       environment: null,
+      authMode: null,
       serverTime: null,
       fetchedAtMs: Date.now(),
       latencyMs,
@@ -91,6 +107,48 @@ export async function fetchHealth(): Promise<HealthSnapshot> {
       detail,
     };
   }
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatusSnapshot> {
+  const res = await fetchWithTimeout('/api/v1/auth/status');
+  if (!res.ok) {
+    throw new Error(`Auth status failed (${res.status})`);
+  }
+  return (await res.json()) as AuthStatusSnapshot;
+}
+
+export function extractApiErrorMessage(payload: unknown, fallback: string): string {
+  const rec = asRecord(payload);
+  if (!rec) return fallback;
+  const errVal = rec['error'];
+  if (typeof errVal === 'string' && errVal.length > 0) return errVal;
+  const errRec = asRecord(errVal);
+  const nestedMsg = asString(errRec?.['message']);
+  if (nestedMsg) return nestedMsg;
+  return asString(rec['message']) ?? fallback;
+}
+
+export async function bootstrapWorkspaceSession(
+  email: string,
+  workspaceName?: string,
+): Promise<{ ok?: boolean; email?: string }> {
+  const res = await fetchWithTimeout('/api/v1/auth/bootstrap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      ...(workspaceName ? { workspaceName } : {}),
+    }),
+  });
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(extractApiErrorMessage(payload, `Sign-in failed (${res.status})`));
+  }
+  return (asRecord(payload) ?? { ok: true }) as { ok?: boolean; email?: string };
+}
+
+export async function logoutSession(): Promise<void> {
+  await fetchWithTimeout('/api/v1/auth/logout', { method: 'POST' });
 }
 
 export async function fetchMe(): Promise<PrincipalSnapshot> {

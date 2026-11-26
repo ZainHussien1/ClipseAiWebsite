@@ -16,11 +16,36 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   'twitter.com',
 ]);
 
+const ALLOWED_THUMBNAIL_HOSTS = new Set([
+  'i.ytimg.com',
+  'i1.ytimg.com',
+  'i2.ytimg.com',
+  'i3.ytimg.com',
+  'i4.ytimg.com',
+  'yt3.ggpht.com',
+  'static-cdn.jtvnw.net',
+  'clips-media-assets2.twitch.tv',
+  'files.kick.com',
+  'images.kick.com',
+]);
+
 export function safeExternalUrl(raw: string): string | null {
   try {
     const parsed = new URL(raw);
     if (parsed.protocol !== 'https:') return null;
     if (!ALLOWED_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function safeThumbnailUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return null;
+    if (!ALLOWED_THUMBNAIL_HOSTS.has(parsed.hostname.toLowerCase())) return null;
     return parsed.toString();
   } catch {
     return null;

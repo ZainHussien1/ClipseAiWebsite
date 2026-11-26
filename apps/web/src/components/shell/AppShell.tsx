@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
-import { fetchHealth, type SystemStatus } from '../../lib/api';
+import { fetchAuthStatus, fetchHealth, logoutSession, type SystemStatus } from '../../lib/api';
 import { listNotifications } from '../../lib/api-v1';
 import { useOnlineStatus } from '../../lib/useOnlineStatus';
 import { CommandPalette } from './CommandPalette';
@@ -9,8 +9,10 @@ import { MobileNav } from './MobileNav';
 import { OfflineBanner } from './OfflineBanner';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
+import { WorkspaceAuthCard } from './WorkspaceAuthCard';
 
 export function AppShell() {
+  const queryClient = useQueryClient();
   const isOnline = useOnlineStatus();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -22,9 +24,20 @@ export function AppShell() {
     retry: 1,
   });
 
+  const authQuery = useQuery({
+    queryKey: ['auth', 'status'],
+    queryFn: fetchAuthStatus,
+    retry: 1,
+  });
+
+  const authReady = Boolean(authQuery.data?.authenticated);
+  const needsSessionSignIn =
+    authQuery.data?.mode === 'session' && !authQuery.data.authenticated;
+
   const notifQuery = useQuery({
     queryKey: ['notifications'],
     queryFn: listNotifications,
+    enabled: authReady,
     refetchInterval: 60_000,
     retry: false,
   });
@@ -38,6 +51,14 @@ export function AppShell() {
   const refreshHealth = useCallback(() => {
     void healthQuery.refetch();
   }, [healthQuery]);
+
+  const handleSignOut = useCallback(() => {
+    void logoutSession().then(() => {
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'status'] });
+      void queryClient.invalidateQueries({ queryKey: ['system', 'me'] });
+      queryClient.removeQueries({ queryKey: ['notifications'] });
+    });
+  }, [queryClient]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -59,8 +80,10 @@ export function AppShell() {
           status={effectiveStatus}
           health={healthQuery.data}
           unreadCount={unreadCount}
+          showSignOut={authQuery.data?.mode === 'session' && authReady}
           isFetchingHealth={healthQuery.isFetching}
           onRefreshHealth={refreshHealth}
+          onSignOut={handleSignOut}
           onOpenCommandPalette={() => setPaletteOpen(true)}
           onOpenMobileDrawer={() => setDrawerOpen(true)}
         />
@@ -72,7 +95,15 @@ export function AppShell() {
         />
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 pt-5 sm:px-6 md:pb-8">
-          <Outlet />
+          {authQuery.isLoading ? (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-[12px] text-[var(--text-secondary)]">
+              Checking workspace session...
+            </div>
+          ) : needsSessionSignIn ? (
+            <WorkspaceAuthCard hasWorkspace={Boolean(authQuery.data?.hasWorkspace)} />
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
 

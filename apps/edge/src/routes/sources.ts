@@ -10,7 +10,103 @@ import {
   type SourceItem,
   type SourceRule,
 } from '@clipse/core';
-import type { EdgeBindings, EdgeVariables } from '../app.js';
+import type { EdgeBindings, EdgeVariables, EngineSyncResult } from '../app.js';
+
+async function syncAccountViaEngine(
+  env: EdgeBindings,
+  workspaceId: string,
+  followId: string,
+  accountId: string,
+  platform: 'youtube' | 'twitch' | 'kick',
+  externalId: string,
+): Promise<(EngineSyncResult & { canonicalAccountId?: string }) | null> {
+  if (!env.ENGINE || typeof env.ENGINE.syncAccount !== 'function') {
+    return null;
+  }
+  try {
+    const sync = await env.ENGINE.syncAccount({ platform, externalId });
+    if (sync.ok && sync.status === 'synced') {
+      const now = new Date().toISOString();
+      const nextExtId = sync.resolvedExternalId ?? externalId;
+      const nextDisplay = sync.channelName ?? externalId;
+
+      if (nextExtId !== externalId) {
+        const canonicalId = `acct:${platform}:${nextExtId}`;
+        const handle = externalId.startsWith('@') ? externalId : nextExtId;
+
+        await env.DB.prepare(
+          `INSERT INTO platform_accounts (id, platform, external_id, handle, display_name, last_synced_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (platform, external_id) DO UPDATE SET
+             display_name = excluded.display_name,
+             last_synced_at = excluded.last_synced_at,
+             updated_at = excluded.updated_at`,
+        )
+          .bind(canonicalId, platform, nextExtId, handle, nextDisplay, now, now, now)
+          .run();
+
+        const canonical = await env.DB.prepare(
+          'SELECT id FROM platform_accounts WHERE platform = ? AND external_id = ?',
+        )
+          .bind(platform, nextExtId)
+          .first<{ id: string }>();
+
+        if (canonical && canonical.id !== accountId) {
+          const existingFollow = await env.DB.prepare(
+            'SELECT id FROM follows WHERE workspace_id = ? AND account_id = ? AND id != ?',
+          )
+            .bind(workspaceId, canonical.id, followId)
+            .first<{ id: string }>();
+
+          if (existingFollow) {
+            await env.DB.prepare(
+              'UPDATE follows SET archived = 0, paused = 0 WHERE id = ? AND workspace_id = ?',
+            )
+              .bind(existingFollow.id, workspaceId)
+              .run();
+            await env.DB.prepare('DELETE FROM follows WHERE id = ? AND workspace_id = ?')
+              .bind(followId, workspaceId)
+              .run();
+          } else {
+            await env.DB.prepare(
+              'UPDATE follows SET account_id = ? WHERE id = ? AND workspace_id = ?',
+            )
+              .bind(canonical.id, followId, workspaceId)
+              .run();
+          }
+
+          await env.DB.prepare(
+            `DELETE FROM platform_accounts
+             WHERE id = ?
+               AND NOT EXISTS (SELECT 1 FROM follows WHERE account_id = ?)
+               AND NOT EXISTS (SELECT 1 FROM items WHERE account_id = ?)`,
+          )
+            .bind(accountId, accountId, accountId)
+            .run();
+
+          return { ...sync, canonicalAccountId: canonical.id };
+        }
+      }
+
+      await env.DB.prepare(
+        `UPDATE platform_accounts
+         SET display_name = ?, last_synced_at = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+        .bind(nextDisplay, now, now, accountId)
+        .run();
+    }
+    return sync;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      status: 'error',
+      itemsSynced: 0,
+      message: `Sync failed: ${detail.slice(0, 180)}`,
+    };
+  }
+}
 
 interface FollowRow {
   follow_id: string;
@@ -81,7 +177,7 @@ async function upsertSourceForWorkspace(
 
   const { platform, externalId } = parsed.value;
   const now = new Date().toISOString();
-  const newAccountId = crypto.randomUUID();
+  const newAccountId = `acct:${platform}:${externalId}`;
 
   await db
     .prepare(
@@ -181,7 +277,101 @@ export function createSourcesRouter() {
       throw AppError.badRequest('Invalid source payload', body.error.flatten());
     }
     const item = await upsertSourceForWorkspace(c.env.DB, principal.workspaceId, body.data);
-    return c.json({ source: item }, 201);
+    const sync = await syncAccountViaEngine(
+      c.env,
+      principal.workspaceId,
+      item.followId,
+      item.accountId,
+      item.platform,
+      item.externalId,
+    );
+    return c.json(
+      {
+        source: {
+          ...item,
+          accountId: sync?.canonicalAccountId ?? item.accountId,
+          externalId: sync?.resolvedExternalId ?? item.externalId,
+          displayName: sync?.channelName ?? item.displayName,
+        },
+        sync,
+      },
+      201,
+    );
+  });
+
+  router.post('/sync-all', async (c) => {
+    const principal = c.get('principal');
+    const rows = await c.env.DB.prepare(
+      `SELECT f.id AS follow_id, a.id AS account_id, a.platform, a.external_id
+       FROM follows f
+       JOIN platform_accounts a ON a.id = f.account_id
+       WHERE f.workspace_id = ? AND f.archived = 0 AND f.paused = 0
+       ORDER BY f.starred DESC, f.created_at DESC
+       LIMIT 50`,
+    )
+      .bind(principal.workspaceId)
+      .all<{
+        follow_id: string;
+        account_id: string;
+        platform: 'youtube' | 'twitch' | 'kick';
+        external_id: string;
+      }>();
+
+    const results: Array<{
+      followId: string;
+      platform: string;
+      sync: EngineSyncResult | null;
+    }> = [];
+    for (const r of rows.results ?? []) {
+      const sync = await syncAccountViaEngine(
+        c.env,
+        principal.workspaceId,
+        r.follow_id,
+        r.account_id,
+        r.platform,
+        r.external_id,
+      );
+      results.push({ followId: r.follow_id, platform: r.platform, sync });
+    }
+
+    return c.json({
+      ok: true,
+      syncedCount: results.filter((r) => r.sync?.status === 'synced').length,
+      results,
+    });
+  });
+
+  router.post('/:followId/sync', async (c) => {
+    const principal = c.get('principal');
+    const followId = c.req.param('followId');
+
+    const row = await c.env.DB.prepare(
+      `SELECT a.id AS account_id, a.platform, a.external_id
+       FROM follows f
+       JOIN platform_accounts a ON a.id = f.account_id
+       WHERE f.id = ? AND f.workspace_id = ?`,
+    )
+      .bind(followId, principal.workspaceId)
+      .first<{
+        account_id: string;
+        platform: 'youtube' | 'twitch' | 'kick';
+        external_id: string;
+      }>();
+
+    if (!row) {
+      throw AppError.notFound('Source not found');
+    }
+
+    const sync = await syncAccountViaEngine(
+      c.env,
+      principal.workspaceId,
+      followId,
+      row.account_id,
+      row.platform,
+      row.external_id,
+    );
+
+    return c.json({ ok: true, followId, sync });
   });
 
   router.post('/bulk', async (c) => {

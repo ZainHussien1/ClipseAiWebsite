@@ -1,14 +1,22 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { Check, Copy, ExternalLink, Rss, Scissors } from 'lucide-react';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Check, Copy, ExternalLink, RefreshCw, Rss, Scissors } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { ClaimModal } from '../components/ui/ClaimModal';
 import { EmptyState } from '../components/ui/EmptyState';
-import { fetchFeed } from '../lib/api-v1';
+import { ProviderStatusBar } from '../components/ui/ProviderStatusBar';
+import { fetchFeed, syncAllSources } from '../lib/api-v1';
 import type { ItemKind, Platform } from '../lib/contracts';
-import { formatAgeSeconds, formatCount, formatLatencyMs, safeExternalUrl } from '../lib/url';
+import {
+  formatAgeSeconds,
+  formatCount,
+  formatLatencyMs,
+  safeExternalUrl,
+  safeThumbnailUrl,
+} from '../lib/url';
 
 export function FeedPage() {
+  const queryClient = useQueryClient();
   const [platform, setPlatform] = useState<Platform | ''>('');
   const [kind, setKind] = useState<ItemKind | ''>('');
   const [starredOnly, setStarredOnly] = useState(false);
@@ -31,6 +39,14 @@ export function FeedPage() {
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
+  const syncMutation = useMutation({
+    mutationFn: syncAllSources,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      void queryClient.invalidateQueries({ queryKey: ['sources'] });
+    },
+  });
+
   const items = feedQuery.data?.pages.flatMap((p) => p.items) ?? [];
 
   const handleCopy = (id: string, url: string) => {
@@ -44,12 +60,25 @@ export function FeedPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-[18px] font-semibold text-[var(--text-strong)]">Feed</h1>
-        <p className="text-[12px] text-[var(--text-secondary)]">
-          Keyset-paginated creator uploads and streams with first-seen latency stamps.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-[18px] font-semibold text-[var(--text-strong)]">Feed</h1>
+          <p className="text-[12px] text-[var(--text-secondary)]">
+            Keyset-paginated creator uploads and streams with first-seen latency stamps.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={syncMutation.isPending}
+          onClick={() => syncMutation.mutate()}
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[var(--accent-tint)] px-3 text-[12px] font-medium text-[var(--text-strong)] disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} strokeWidth={1.5} />
+          {syncMutation.isPending ? 'Syncing...' : 'Sync Now'}
+        </button>
       </div>
+
+      <ProviderStatusBar />
 
       <Card className="flex flex-wrap items-center gap-2.5 p-3">
         <input
@@ -107,15 +136,24 @@ export function FeedPage() {
         <EmptyState
           icon={Rss}
           title="No feed items match your filters"
-          description="Add creator sources or adjust your filters. Real ingested items will appear here."
+          description="Add creator sources or click Sync Now to ingest latest uploads."
         />
       ) : (
         <div className="space-y-2.5">
           {items.map((item) => {
             const externalUrl = safeExternalUrl(item.url);
+            const thumbUrl = safeThumbnailUrl(item.thumbnailUrl);
             return (
               <Card key={item.id} className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
+                  {thumbUrl && (
+                    <img
+                      src={thumbUrl}
+                      alt={item.title}
+                      loading="lazy"
+                      className="aspect-video w-32 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] object-cover sm:w-36"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-[11px]">
                       <span className="rounded border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-semibold uppercase text-[var(--text-secondary)]">

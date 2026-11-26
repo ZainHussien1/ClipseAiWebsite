@@ -1,3 +1,4 @@
+import { extractApiErrorMessage } from './api';
 import type {
   ActiveRisingTier,
   AlertItem,
@@ -31,6 +32,17 @@ export class ApiError extends Error {
   }
 }
 
+export interface ProviderStatusEntry {
+  status: string;
+  label: string;
+}
+
+export interface ProviderStatusMap {
+  youtube: ProviderStatusEntry;
+  twitch: ProviderStatusEntry;
+  kick: ProviderStatusEntry;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     credentials: 'same-origin',
@@ -44,17 +56,19 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   const payload = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg =
-      (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-        ? payload.error
-        : null) ??
-      (payload && typeof payload === 'object' && 'message' in payload && typeof payload.message === 'string'
-        ? payload.message
-        : null) ??
-      `Request failed (${res.status})`;
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, extractApiErrorMessage(payload, `Request failed (${res.status})`));
   }
   return payload as T;
+}
+
+export async function fetchProviderStatus(): Promise<ProviderStatusMap> {
+  const data = await requestJson<{ providers?: ProviderStatusMap } | ProviderStatusMap>(
+    '/api/v1/providers/status',
+  );
+  if ('providers' in data && data.providers) {
+    return data.providers;
+  }
+  return data as ProviderStatusMap;
 }
 
 export async function listSources(): Promise<SourceItem[]> {
@@ -96,6 +110,19 @@ export async function updateSource(
   return requestJson<SourceItem>(`/api/v1/sources/${encodeURIComponent(followId)}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
+  });
+}
+
+export async function syncSource(followId: string): Promise<{ ok?: boolean; itemsIngested?: number }> {
+  return requestJson<{ ok?: boolean; itemsIngested?: number }>(
+    `/api/v1/sources/${encodeURIComponent(followId)}/sync`,
+    { method: 'POST' },
+  );
+}
+
+export async function syncAllSources(): Promise<{ ok?: boolean; synced?: number }> {
+  return requestJson<{ ok?: boolean; synced?: number }>('/api/v1/sources/sync-all', {
+    method: 'POST',
   });
 }
 

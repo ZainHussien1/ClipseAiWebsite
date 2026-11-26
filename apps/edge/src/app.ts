@@ -1,10 +1,12 @@
 import { Hono, type MiddlewareHandler } from 'hono';
+import { cors } from 'hono/cors';
 import {
   AppError,
   envSchema,
   type AuthProvider,
   type HealthStatus,
   type IngestQueueMessage,
+  type Platform,
   type Principal,
 } from '@clipse/core';
 import { CloudflareAccessAuthProvider, resolvePrincipal } from './auth.js';
@@ -14,29 +16,60 @@ import {
   createYouTubeHooksRouter,
 } from './hooks/index.js';
 import { createAlertsRouter } from './routes/alerts.js';
+import { createAuthRouter } from './routes/auth.js';
 import { createClaimsRouter } from './routes/claims.js';
 import { createClipsRouter } from './routes/clips.js';
 import { createFeedRouter } from './routes/feed.js';
 import { createLiveRouter } from './routes/live.js';
 import { createNotificationsRouter } from './routes/notifications.js';
+import { createProvidersRouter } from './routes/providers.js';
 import { createReportsRouter } from './routes/reports.js';
 import { createRisingRouter } from './routes/rising.js';
 import { createSettingsRouter } from './routes/settings.js';
 import { createSourcesRouter } from './routes/sources.js';
 import { csrfMiddleware, securityHeadersMiddleware } from './security.js';
+import {
+  getSessionCookieName,
+  parseCookie,
+  resolveSessionSecret,
+  SessionAuthProvider,
+} from './session.js';
 import type { WorkspaceDO } from './do/workspace.js';
+
+export interface EngineSyncResult {
+  readonly ok: boolean;
+  readonly status: 'synced' | 'credentials_missing' | 'error';
+  readonly itemsSynced: number;
+  readonly channelName?: string | null;
+  readonly resolvedExternalId?: string | null;
+  readonly message?: string;
+}
+
+export interface EngineServiceBinding {
+  syncAccount?: (input: {
+    platform: Platform;
+    externalId: string;
+  }) => Promise<EngineSyncResult>;
+}
 
 export interface EdgeBindings {
   DB: D1Database;
   WORKSPACE_DO: DurableObjectNamespace<WorkspaceDO>;
   INGEST_QUEUE?: Queue<IngestQueueMessage>;
+  ENGINE?: EngineServiceBinding;
   ASSETS?: Fetcher;
   ENVIRONMENT?: string;
   AI_INSIGHTS_ENABLED?: string;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
+  SESSION_SECRET?: string;
   DISCORD_WEBHOOK_URL?: string;
   GEMINI_API_KEY?: string;
+  YOUTUBE_API_KEY?: string;
+  TWITCH_CLIENT_ID?: string;
+  TWITCH_CLIENT_SECRET?: string;
+  KICK_CLIENT_ID?: string;
+  KICK_CLIENT_SECRET?: string;
   YOUTUBE_WEBSUB_SECRET?: string;
   TWITCH_EVENTSUB_SECRET?: string;
   KICK_PUBLIC_KEY?: string;
@@ -55,12 +88,35 @@ export function createApp(deps: AppDependencies = {}) {
   const app = new Hono<{ Bindings: EdgeBindings; Variables: EdgeVariables }>();
 
   app.use('*', securityHeadersMiddleware);
+  app.use(
+    '/api/*',
+    cors({
+      origin: (origin, c) => {
+        if (!origin) return '';
+        try {
+          const reqOrigin = new URL(c.req.url).origin;
+          if (origin === reqOrigin) return origin;
+          const parsed = new URL(origin);
+          if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+            return origin;
+          }
+        } catch {
+          return '';
+        }
+        return '';
+      },
+      credentials: true,
+    }),
+  );
   app.use('/api/*', csrfMiddleware);
 
   // Public provider webhook endpoints (outside Access JWT & CSRF; signature + dedupe protected)
   app.route('/hooks/youtube', createYouTubeHooksRouter());
   app.route('/hooks/twitch', createTwitchHooksRouter());
   app.route('/hooks/kick', createKickHooksRouter());
+
+  // Auth status / session bootstrap (outside authMiddleware, inside CSRF)
+  app.route('/api/v1/auth', createAuthRouter());
 
   app.onError((err, c) => {
     if (err instanceof AppError) {
@@ -96,6 +152,12 @@ export function createApp(deps: AppDependencies = {}) {
       GEMINI_API_KEY: c.env.GEMINI_API_KEY,
     });
 
+    const authMode =
+      c.env.ACCESS_TEAM_DOMAIN && c.env.ACCESS_AUD ? 'access' : 'session';
+    const sessionConfigured =
+      Boolean(c.env.SESSION_SECRET) || (c.env.ENVIRONMENT ?? 'local') === 'local';
+    const authConfigured = authMode === 'access' || sessionConfigured;
+
     let status: HealthStatus = 'ok';
     try {
       await c.env.DB.prepare('SELECT 1 AS ok').first();
@@ -103,13 +165,16 @@ export function createApp(deps: AppDependencies = {}) {
       status = 'degraded';
     }
 
-    const authConfigured = Boolean(c.env.ACCESS_TEAM_DOMAIN && c.env.ACCESS_AUD);
-    if (!parsedEnv.success || !authConfigured) {
+    if (
+      !authConfigured ||
+      (authMode === 'access' && !parsedEnv.success)
+    ) {
       status = 'degraded';
     }
 
     return c.json({
       status,
+      authMode,
       environment: c.env.ENVIRONMENT ?? 'local',
       authConfigured,
       source: 'edge',
@@ -117,41 +182,19 @@ export function createApp(deps: AppDependencies = {}) {
     });
   });
 
-  app.use('/api/v1/me', async (c, next) => {
-    const authProvider = getAuthProvider(c.env, deps);
-    const principal = await resolvePrincipal(
-      c.env.DB,
-      authProvider,
-      c.req.header('Cf-Access-Jwt-Assertion'),
-    );
-    c.set('principal', principal);
-    await next();
-  });
-
-  app.use('/api/v1/workspaces/*', async (c, next) => {
-    const authProvider = getAuthProvider(c.env, deps);
-    const principal = await resolvePrincipal(
-      c.env.DB,
-      authProvider,
-      c.req.header('Cf-Access-Jwt-Assertion'),
-    );
-    c.set('principal', principal);
-    await next();
-  });
-
   const authMiddleware: MiddlewareHandler<{
     Bindings: EdgeBindings;
     Variables: EdgeVariables;
   }> = async (c, next) => {
-    const authProvider = getAuthProvider(c.env, deps);
-    const principal = await resolvePrincipal(
-      c.env.DB,
-      authProvider,
-      c.req.header('Cf-Access-Jwt-Assertion'),
-    );
+    const { provider, token } = getAuthRequestContext(c.env, c.req.raw, deps);
+    const principal = await resolvePrincipal(c.env.DB, provider, token);
     c.set('principal', principal);
     await next();
   };
+
+  app.use('/api/v1/me', authMiddleware);
+  app.use('/api/v1/workspaces/*', authMiddleware);
+  app.use('/api/v1/providers/*', authMiddleware);
 
   app.use('/api/v1/sources', authMiddleware);
   app.use('/api/v1/sources/*', authMiddleware);
@@ -174,6 +217,7 @@ export function createApp(deps: AppDependencies = {}) {
   app.use('/api/v1/ws', authMiddleware);
 
   app.route('/api/v1/sources', createSourcesRouter());
+  app.route('/api/v1/providers', createProvidersRouter());
   app.route('/api/v1/feed', createFeedRouter());
   app.route('/api/v1/live', createLiveRouter());
   app.route('/api/v1/rising', createRisingRouter());
@@ -225,12 +269,30 @@ export function createApp(deps: AppDependencies = {}) {
   return app;
 }
 
-function getAuthProvider(env: EdgeBindings, deps: AppDependencies): AuthProvider {
+function getAuthRequestContext(
+  env: EdgeBindings,
+  request: Request,
+  deps: AppDependencies,
+): { provider: AuthProvider; token: string | undefined } {
   if (deps.authProviderFactory) {
-    return deps.authProviderFactory(env);
+    return {
+      provider: deps.authProviderFactory(env),
+      token: request.headers.get('Cf-Access-Jwt-Assertion') ?? undefined,
+    };
   }
-  if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
-    throw AppError.unauthorized('Access JWT verifier is not configured');
+  if (env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD) {
+    return {
+      provider: new CloudflareAccessAuthProvider(
+        env.ACCESS_TEAM_DOMAIN,
+        env.ACCESS_AUD,
+      ),
+      token: request.headers.get('Cf-Access-Jwt-Assertion') ?? undefined,
+    };
   }
-  return new CloudflareAccessAuthProvider(env.ACCESS_TEAM_DOMAIN, env.ACCESS_AUD);
+  const secret = resolveSessionSecret(env.SESSION_SECRET, env.ENVIRONMENT);
+  const cookieName = getSessionCookieName(request.url);
+  return {
+    provider: new SessionAuthProvider(secret),
+    token: parseCookie(request.headers.get('Cookie') ?? undefined, cookieName),
+  };
 }

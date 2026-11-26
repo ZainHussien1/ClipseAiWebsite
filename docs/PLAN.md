@@ -75,7 +75,7 @@ flowchart LR
 | P5.1 | Clip Log, Our channels, ROI, Scorecard, Report | backend | P4.1 | `packages/core`, `apps/edge`, `apps/engine` | Truth audit + export tests | Med | done |
 | P5.2 | Clip Log, ROI, Scorecard, Reports, Settings UI | frontend | P5.1 | `apps/web` | Full flow E2E + zero mock data | Low | done |
 | P6.1 | Security/perf/truth audit, DR drill, 24h soak | security, qa, perf | P5.2 | `docs/RUNBOOK.md`, tests | Zero defects, soak report, RPO/RTO | High | done |
-| P7.1 | Prod deploy, smoke test, Discord alerts | platform, lead | P6.1 | `wrangler.*`, `docs/RUNBOOK.md` | Gradual rollout + prod smoke pass | Med | ready |
+| P7.1 | Prod deploy, smoke test, Discord alerts | platform, lead | P6.1 | `wrangler.*`, `docs/RUNBOOK.md` | Gradual rollout + prod smoke pass | Med | done |
 
 ## 11. Real Risks & Open Questions (<=5)
 1. **`git` missing from PATH** on Windows dev machine; blocks commits/hooks until Git for Windows is installed/added to PATH.
