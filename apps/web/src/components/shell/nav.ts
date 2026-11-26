@@ -23,7 +23,7 @@ export type AppRoutePath =
   | '/sources'
   | '/my-work'
   | '/notifications'
-  | '/clips'
+  | '/clip-log'
   | '/reports'
   | '/settings'
   | '/live';
@@ -96,28 +96,28 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'Notification inbox, quiet hours, hourly budget, Discord, and Web Push.',
   },
   {
-    to: '/clips',
+    to: '/clip-log',
     label: 'Clip Log',
     section: 'WORKSPACE',
     icon: Scissors,
-    phaseLabel: 'Phase 5 pending',
-    description: 'Claimed moments, published clips, and source ROI tracking.',
+    phaseLabel: 'Phase 5 active',
+    description: 'Claimed moments, published clips, Our Channels, and manual vs API stats.',
   },
   {
     to: '/reports',
     label: 'Reports',
     section: 'WORKSPACE',
     icon: FileBarChart2,
-    phaseLabel: 'Phase 5 pending',
-    description: 'Accuracy scorecard, daily rollups, and workspace exports.',
+    phaseLabel: 'Phase 5 active',
+    description: 'Daily report, source ROI, and accuracy scorecard.',
   },
   {
     to: '/settings',
     label: 'Settings',
     section: 'WORKSPACE',
     icon: Settings,
-    phaseLabel: 'Phase 5 pending',
-    description: 'Workspace members, notification rules, and integrations.',
+    phaseLabel: 'Phase 5 active',
+    description: 'Workspace members, JSON/CSV export, and atomic workspace deletion.',
   },
   {
     to: '/live',

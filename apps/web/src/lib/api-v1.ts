@@ -3,6 +3,9 @@ import type {
   AlertItem,
   ClaimRecord,
   ClaimStatus,
+  ClipPlatform,
+  ClipRecord,
+  DailyReportData,
   FeedResponse,
   ItemKind,
   LiveResponse,
@@ -11,7 +14,11 @@ import type {
   Platform,
   PushSubscriptionInput,
   RisingResponse,
+  ScorecardData,
   SourceItem,
+  SourceRoiEntry,
+  WorkspaceMember,
+  WorkspaceRole,
 } from './contracts';
 
 export class ApiError extends Error {
@@ -218,5 +225,97 @@ export async function updateDiscordWebhook(
   return requestJson<{ configured: boolean }>('/api/v1/notifications/discord', {
     method: 'PUT',
     body: JSON.stringify({ webhookUrl }),
+  });
+}
+
+export async function listClips(): Promise<ClipRecord[]> {
+  const data = await requestJson<{ clips?: ClipRecord[]; items?: ClipRecord[] } | ClipRecord[]>(
+    '/api/v1/clips',
+  );
+  if (Array.isArray(data)) return data;
+  return data.clips ?? data.items ?? [];
+}
+
+export async function createClip(input: {
+  url: string;
+  platform: ClipPlatform;
+  title?: string;
+  description?: string;
+  sourceItemId?: string;
+  manualStats?: { views: number; likes?: number; comments?: number };
+}): Promise<ClipRecord> {
+  return requestJson<ClipRecord>('/api/v1/clips', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function confirmClipLink(
+  clipId: string,
+  sourceItemId: string,
+): Promise<ClipRecord> {
+  return requestJson<ClipRecord>(`/api/v1/clips/${encodeURIComponent(clipId)}/confirm-link`, {
+    method: 'POST',
+    body: JSON.stringify({ sourceItemId }),
+  });
+}
+
+export async function fetchSourceRoi(): Promise<SourceRoiEntry[]> {
+  const data = await requestJson<{ entries?: SourceRoiEntry[]; items?: SourceRoiEntry[] } | SourceRoiEntry[]>(
+    '/api/v1/roi',
+  );
+  if (Array.isArray(data)) return data;
+  return data.entries ?? data.items ?? [];
+}
+
+export async function fetchScorecard(): Promise<ScorecardData> {
+  return requestJson<ScorecardData>('/api/v1/admin/scorecard');
+}
+
+export async function fetchDailyReport(date?: string): Promise<DailyReportData> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  return requestJson<DailyReportData>(`/api/v1/reports/daily${qs}`);
+}
+
+export async function listMembers(): Promise<WorkspaceMember[]> {
+  const data = await requestJson<
+    { members?: WorkspaceMember[]; items?: WorkspaceMember[] } | WorkspaceMember[]
+  >('/api/v1/settings/members');
+  if (Array.isArray(data)) return data;
+  return data.members ?? data.items ?? [];
+}
+
+export async function updateMemberRole(
+  userId: string,
+  role: WorkspaceRole,
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/settings/members/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function removeMember(userId: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/settings/members/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function exportWorkspace(format: 'json' | 'csv'): Promise<Blob> {
+  const res = await fetch('/api/v1/export', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ format }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `Export failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function deleteWorkspace(): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>('/api/v1/settings/workspace', {
+    method: 'DELETE',
   });
 }

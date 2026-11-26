@@ -15,10 +15,13 @@ import {
 } from './hooks/index.js';
 import { createAlertsRouter } from './routes/alerts.js';
 import { createClaimsRouter } from './routes/claims.js';
+import { createClipsRouter } from './routes/clips.js';
 import { createFeedRouter } from './routes/feed.js';
 import { createLiveRouter } from './routes/live.js';
 import { createNotificationsRouter } from './routes/notifications.js';
+import { createReportsRouter } from './routes/reports.js';
 import { createRisingRouter } from './routes/rising.js';
+import { createSettingsRouter } from './routes/settings.js';
 import { createSourcesRouter } from './routes/sources.js';
 import { csrfMiddleware, securityHeadersMiddleware } from './security.js';
 import type { WorkspaceDO } from './do/workspace.js';
@@ -155,6 +158,13 @@ export function createApp(deps: AppDependencies = {}) {
   app.use('/api/v1/alerts/*', authMiddleware);
   app.use('/api/v1/notifications', authMiddleware);
   app.use('/api/v1/notifications/*', authMiddleware);
+  app.use('/api/v1/clips', authMiddleware);
+  app.use('/api/v1/clips/*', authMiddleware);
+  app.use('/api/v1/roi', authMiddleware);
+  app.use('/api/v1/admin/*', authMiddleware);
+  app.use('/api/v1/reports/*', authMiddleware);
+  app.use('/api/v1/settings/*', authMiddleware);
+  app.use('/api/v1/export', authMiddleware);
   app.use('/api/v1/ws', authMiddleware);
 
   app.route('/api/v1/sources', createSourcesRouter());
@@ -164,6 +174,9 @@ export function createApp(deps: AppDependencies = {}) {
   app.route('/api/v1/claims', createClaimsRouter());
   app.route('/api/v1/alerts', createAlertsRouter());
   app.route('/api/v1/notifications', createNotificationsRouter());
+  app.route('/api/v1/clips', createClipsRouter());
+  app.route('/api/v1', createReportsRouter());
+  app.route('/api/v1', createSettingsRouter());
 
   app.get('/api/v1/ws', async (c) => {
     const principal = c.get('principal');

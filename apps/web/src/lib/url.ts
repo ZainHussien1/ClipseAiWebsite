@@ -8,6 +8,12 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   'clips.twitch.tv',
   'kick.com',
   'www.kick.com',
+  'tiktok.com',
+  'www.tiktok.com',
+  'instagram.com',
+  'www.instagram.com',
+  'x.com',
+  'twitter.com',
 ]);
 
 export function safeExternalUrl(raw: string): string | null {

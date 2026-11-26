@@ -1,7 +1,6 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 import { Suspense, lazy, type ComponentType } from 'react';
 import { AppShell } from './components/shell/AppShell';
-import type { AppRoutePath } from './components/shell/nav';
 import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
 import { OverviewPage } from './routes/OverviewPage';
 
@@ -26,8 +25,14 @@ const MyWorkPage = lazy(() =>
 const NotificationsPage = lazy(() =>
   import('./routes/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
 );
-const PendingModulePage = lazy(() =>
-  import('./routes/PendingModulePage').then((m) => ({ default: m.PendingModulePage })),
+const ClipLogPage = lazy(() =>
+  import('./routes/ClipLogPage').then((m) => ({ default: m.ClipLogPage })),
+);
+const ReportsPage = lazy(() =>
+  import('./routes/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+const SettingsPage = lazy(() =>
+  import('./routes/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 
 function LazyRoute({
@@ -47,22 +52,6 @@ function LazyRoute({
         }
       >
         <Component />
-      </Suspense>
-    </RouteErrorBoundary>
-  );
-}
-
-function PendingWrapper({ path, name }: { path: AppRoutePath; name: string }) {
-  return (
-    <RouteErrorBoundary routeName={name}>
-      <Suspense
-        fallback={
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-[12px] text-[var(--text-secondary)]">
-            Loading {name}...
-          </div>
-        }
-      >
-        <PendingModulePage path={path} />
       </Suspense>
     </RouteErrorBoundary>
   );
@@ -122,22 +111,28 @@ const notificationsRoute = createRoute({
   component: () => <LazyRoute name="Notifications" Component={NotificationsPage} />,
 });
 
-const clipsRoute = createRoute({
+const clipLogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/clip-log',
+  component: () => <LazyRoute name="Clip Log" Component={ClipLogPage} />,
+});
+
+const clipsAliasRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/clips',
-  component: () => <PendingWrapper path="/clips" name="Clip Log" />,
+  component: () => <LazyRoute name="Clip Log" Component={ClipLogPage} />,
 });
 
 const reportsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/reports',
-  component: () => <PendingWrapper path="/reports" name="Reports" />,
+  component: () => <LazyRoute name="Reports" Component={ReportsPage} />,
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
-  component: () => <PendingWrapper path="/settings" name="Settings" />,
+  component: () => <LazyRoute name="Settings" Component={SettingsPage} />,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -149,7 +144,8 @@ const routeTree = rootRoute.addChildren([
   sourcesRoute,
   myWorkRoute,
   notificationsRoute,
-  clipsRoute,
+  clipLogRoute,
+  clipsAliasRoute,
   reportsRoute,
   settingsRoute,
 ]);

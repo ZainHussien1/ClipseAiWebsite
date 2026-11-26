@@ -318,3 +318,136 @@ export const discordWebhookConfigSchema = z.object({
     .nullable(),
 });
 export type DiscordWebhookConfigInput = z.infer<typeof discordWebhookConfigSchema>;
+
+// ============================================================================
+// Phase 5: Clip Log, Our Channels, ROI, Scorecard, Daily Report, Settings/Export
+// ============================================================================
+
+export const clipPlatformSchema = z.enum([
+  'youtube',
+  'twitch',
+  'kick',
+  'tiktok',
+  'instagram',
+  'x',
+]);
+export type ClipPlatform = z.infer<typeof clipPlatformSchema>;
+
+export const manualClipStatsSchema = z.object({
+  views: z.number().int().nonnegative(),
+  likes: z.number().int().nonnegative().optional(),
+  comments: z.number().int().nonnegative().optional(),
+});
+export type ManualClipStats = z.infer<typeof manualClipStatsSchema>;
+
+export const createClipSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .url()
+    .refine((u) => u.startsWith('https://'), {
+      message: 'Clip URL must use https://',
+    }),
+  platform: clipPlatformSchema,
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().trim().max(2000).optional(),
+  claimId: z.string().trim().min(1).max(128).optional(),
+  sourceItemId: z.string().trim().min(1).max(128).optional(),
+  manualStats: manualClipStatsSchema.optional(),
+});
+export type CreateClipInput = z.infer<typeof createClipSchema>;
+
+export const confirmClipLinkSchema = z.object({
+  sourceItemId: z.string().trim().min(1).max(128),
+});
+export type ConfirmClipLinkInput = z.infer<typeof confirmClipLinkSchema>;
+
+export const clipRecordSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  claimId: z.string().nullable(),
+  sourceItemId: z.string().nullable(),
+  userId: z.string().nullable(),
+  url: z.string(),
+  platform: clipPlatformSchema,
+  title: z.string().nullable(),
+  needsConfirmation: z.boolean(),
+  statsSource: z.enum(['api', 'manual']).nullable(),
+  views: z.number().int().nonnegative().nullable(),
+  likes: z.number().int().nonnegative().nullable(),
+  comments: z.number().int().nonnegative().nullable(),
+  statsCapturedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type ClipRecord = z.infer<typeof clipRecordSchema>;
+
+export const sourceRoiSchema = z.object({
+  accountId: z.string(),
+  handle: z.string(),
+  displayName: z.string(),
+  platform: platformSchema,
+  claimsCount: z.number().int().nonnegative(),
+  clipsCount: z.number().int().nonnegative(),
+  totalClipViews: z.number().int().nonnegative(),
+  sampleFloor: z.number().int().positive(),
+  status: z.enum(['ready', 'not enough data yet']),
+  clipsPerClaim: z.number().nullable(),
+});
+export type SourceRoiEntry = z.infer<typeof sourceRoiSchema>;
+
+export const scorecardMetricSchema = z.object({
+  precision: z.number().nullable(),
+  sampleSize: z.number().int().nonnegative(),
+  sampleFloor: z.number().int().positive(),
+  status: z.enum(['ready', 'not enough data yet']),
+});
+
+export const scorecardSchema = z.object({
+  rising: scorecardMetricSchema,
+  liveMoments: scorecardMetricSchema,
+  avgTimeToAlertMs: z.number().nullable(),
+  missedPushRate: z.number().nullable(),
+  alertToClaimRate: z.number().nullable(),
+  telemetry: z.object({
+    pushesReceived: z.number().int().nonnegative(),
+    missedPushes: z.number().int().nonnegative(),
+    reconcileRuns: z.number().int().nonnegative(),
+  }),
+  source: z.string(),
+  asOf: z.string(),
+});
+export type ScorecardData = z.infer<typeof scorecardSchema>;
+
+export const dailyReportMemberSchema = z.object({
+  userId: z.string(),
+  email: z.string(),
+  claimsCount: z.number().int().nonnegative(),
+  clippedCount: z.number().int().nonnegative(),
+  clipsLoggedCount: z.number().int().nonnegative(),
+});
+
+export const dailyReportSchema = z.object({
+  date: z.string(),
+  timezone: z.string(),
+  aiInsightsUsed: z.boolean(),
+  teamSummary: z.object({
+    alertsCount: z.number().int().nonnegative(),
+    claimsCount: z.number().int().nonnegative(),
+    clippedCount: z.number().int().nonnegative(),
+    clipsLoggedCount: z.number().int().nonnegative(),
+  }),
+  members: z.array(dailyReportMemberSchema),
+  source: z.string(),
+  asOf: z.string(),
+});
+export type DailyReportData = z.infer<typeof dailyReportSchema>;
+
+export const memberUpdateSchema = z.object({
+  role: z.enum(['Owner', 'Admin', 'Member', 'Viewer']),
+});
+export type MemberUpdateInput = z.infer<typeof memberUpdateSchema>;
+
+export const exportFormatSchema = z.object({
+  format: z.enum(['json', 'csv']).default('json'),
+});
+export type ExportFormatInput = z.infer<typeof exportFormatSchema>;

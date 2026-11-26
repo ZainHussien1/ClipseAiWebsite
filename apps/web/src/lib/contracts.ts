@@ -1,4 +1,5 @@
 export type Platform = 'youtube' | 'twitch' | 'kick';
+export type ClipPlatform = Platform | 'tiktok' | 'instagram' | 'x';
 export type ItemKind = 'video' | 'short' | 'live' | 'vod' | 'clip';
 export type RisingTier = 'none' | 'rising' | 'breakout' | 'viral';
 export type ActiveRisingTier = Exclude<RisingTier, 'none'>;
@@ -8,6 +9,7 @@ export type AlertType = 'rising' | 'breakout' | 'viral' | 'live_moment' | 'vod_r
 export type AlertConfidence = 'low' | 'medium' | 'high';
 export type NotificationTier = 'P1' | 'P2' | 'P3';
 export type NotificationChannel = 'discord' | 'webpush' | 'in_app';
+export type WorkspaceRole = 'Owner' | 'Admin' | 'Member' | 'Viewer';
 
 export interface SourceRule {
   minRisingLevel: ActiveRisingTier;
@@ -175,4 +177,87 @@ export interface PushSubscriptionInput {
     p256dh: string;
     auth: string;
   };
+}
+
+export interface ClipRecord {
+  id: string;
+  workspaceId: string;
+  claimId: string | null;
+  sourceItemId: string | null;
+  userId: string | null;
+  url: string;
+  platform: ClipPlatform;
+  title: string | null;
+  needsConfirmation: boolean;
+  statsSource: 'api' | 'manual' | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  statsCapturedAt: string | null;
+  createdAt: string;
+}
+
+export interface SourceRoiEntry {
+  accountId: string;
+  handle: string;
+  displayName: string;
+  platform: Platform;
+  claimsCount: number;
+  clipsCount: number;
+  totalClipViews: number;
+  sampleFloor: number;
+  status: 'ready' | 'not enough data yet';
+  clipsPerClaim: number | null;
+}
+
+export interface ScorecardMetric {
+  precision: number | null;
+  sampleSize: number;
+  sampleFloor: number;
+  status: 'ready' | 'not enough data yet';
+}
+
+export interface ScorecardData {
+  rising: ScorecardMetric;
+  liveMoments: ScorecardMetric;
+  avgTimeToAlertMs: number | null;
+  missedPushRate: number | null;
+  alertToClaimRate: number | null;
+  telemetry: {
+    pushesReceived: number;
+    missedPushes: number;
+    reconcileRuns: number;
+  };
+  source: string;
+  asOf: string;
+}
+
+export interface DailyReportMember {
+  userId: string;
+  email: string;
+  claimsCount: number;
+  clippedCount: number;
+  clipsLoggedCount: number;
+}
+
+export interface DailyReportData {
+  date: string;
+  timezone: string;
+  aiInsightsUsed: boolean;
+  teamSummary: {
+    alertsCount: number;
+    claimsCount: number;
+    clippedCount: number;
+    clipsLoggedCount: number;
+  };
+  members: DailyReportMember[];
+  source: string;
+  asOf: string;
+}
+
+export interface WorkspaceMember {
+  userId: string;
+  email: string;
+  role: WorkspaceRole;
+  createdAt?: string;
 }
