@@ -1,0 +1,4 @@
+# Local Worker secrets for Wrangler / local dev.
+# Copy to .dev.vars and fill in real values (NEVER commit .dev.vars).
+DISCORD_WEBHOOK_URL=
+GEMINI_API_KEY=

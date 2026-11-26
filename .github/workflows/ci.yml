@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Secret scan
+        run: |
+          if git ls-files --error-unmatch .dev.vars 2>/dev/null; then
+            echo "ERROR: .dev.vars must not be tracked"
+            exit 1
+          fi
+          ! grep -rnE "(AIza[0-9A-Za-z_-]{35}|discord\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+|-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----)" \
+            --exclude-dir=node_modules --exclude-dir=.git --exclude=".dev.vars*" .
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

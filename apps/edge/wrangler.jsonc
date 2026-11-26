@@ -1,0 +1,57 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clipse-radar-edge",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/hooks/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clipse-radar-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WORKSPACE_DO",
+        "class_name": "WorkspaceDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WorkspaceDO"]
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "INGEST_QUEUE",
+        "queue": "ingest-queue"
+      },
+      {
+        "binding": "NOTIFY_QUEUE",
+        "queue": "notify-queue"
+      }
+    ]
+  },
+  "services": [
+    {
+      "binding": "ENGINE",
+      "service": "clipse-radar-engine"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "local",
+    "AI_INSIGHTS_ENABLED": "false"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@clipse/edge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "wrangler deploy --dry-run --outdir dist"
+  },
+  "dependencies": {
+    "@clipse/core": "workspace:*",
+    "hono": "^4.7.6",
+    "jose": "^6.0.10",
+    "zod": "^3.24.2"
+  }
+}

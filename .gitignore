@@ -1,0 +1,28 @@
+# Secrets and local env (NEVER commit)
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+
+# Dependencies & build outputs
+node_modules/
+.pnpm-store/
+dist/
+build/
+.wrangler/
+.vite/
+*.tsbuildinfo
+
+# Test & verification artifacts
+.artifacts/
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# OS & editor junk
+.DS_Store
+Thumbs.db
+*.log
