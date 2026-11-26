@@ -1,35 +1,65 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck } from 'lucide-react';
+import { KeyRound, Mail, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
-import { bootstrapWorkspaceSession } from '../../lib/api';
+import { loginWorkspaceSession, requestAuthCode } from '../../lib/api';
 import { Card } from '../ui/Card';
 
 interface WorkspaceAuthCardProps {
   hasWorkspace: boolean;
 }
 
+type AuthTab = 'code' | 'passphrase';
+
 export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<AuthTab>('code');
   const [email, setEmail] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
+  const [code, setCode] = useState('');
+  const [passphrase, setPassphrase] = useState('');
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const authMutation = useMutation({
+  const requestCodeMutation = useMutation({
+    mutationFn: () => requestAuthCode(email.trim()),
+    onSuccess: (res) => {
+      setErrorMsg(null);
+      setInfoMsg(res.message);
+    },
+    onError: (err) => {
+      setInfoMsg(null);
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to send code');
+    },
+  });
+
+  const loginMutation = useMutation({
     mutationFn: () =>
-      bootstrapWorkspaceSession(
-        email.trim(),
-        !hasWorkspace && workspaceName.trim() ? workspaceName.trim() : undefined,
-      ),
+      loginWorkspaceSession({
+        email: email.trim(),
+        ...(workspaceName.trim() && !hasWorkspace ? { workspaceName: workspaceName.trim() } : {}),
+        ...(tab === 'code' ? { code: code.trim() } : { passphrase }),
+      }),
     onSuccess: () => {
       setErrorMsg(null);
       void queryClient.invalidateQueries({ queryKey: ['auth', 'status'] });
       void queryClient.invalidateQueries({ queryKey: ['system', 'me'] });
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      void queryClient.invalidateQueries({ queryKey: ['live'] });
     },
     onError: (err) => {
       setErrorMsg(err instanceof Error ? err.message : 'Sign-in failed');
     },
   });
+
+  const handleRequestCode = () => {
+    setErrorMsg(null);
+    setInfoMsg(null);
+    if (!email.trim().includes('@')) {
+      setErrorMsg('Enter a valid email address first.');
+      return;
+    }
+    requestCodeMutation.mutate();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +68,15 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
       setErrorMsg('Enter a valid email address.');
       return;
     }
-    authMutation.mutate();
+    if (tab === 'code' && !/^\d{6}$/.test(code.trim())) {
+      setErrorMsg('Enter the 6-digit verification code.');
+      return;
+    }
+    if (tab === 'passphrase' && passphrase.length < 8) {
+      setErrorMsg('Passphrase must be at least 8 characters.');
+      return;
+    }
+    loginMutation.mutate();
   };
 
   return (
@@ -54,13 +92,46 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
             </h1>
             <p className="text-[12px] text-[var(--text-secondary)]">
               {hasWorkspace
-                ? 'Enter your invited workspace member email.'
-                : 'Initialize the first Owner workspace for this deployment.'}
+                ? 'Verify with a 6-digit Discord OTP or your passphrase.'
+                : 'Initialize the Owner workspace with a verified code or passphrase.'}
             </p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-3">
+        <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setTab('code');
+              setErrorMsg(null);
+            }}
+            className={`inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-md text-[12px] font-medium ${
+              tab === 'code'
+                ? 'bg-[var(--accent-tint)] text-[var(--text-strong)]'
+                : 'text-[var(--text-secondary)]'
+            }`}
+          >
+            <Mail className="h-3.5 w-3.5" strokeWidth={1.5} />
+            6-Digit Code
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab('passphrase');
+              setErrorMsg(null);
+            }}
+            className={`inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-md text-[12px] font-medium ${
+              tab === 'passphrase'
+                ? 'bg-[var(--accent-tint)] text-[var(--text-strong)]'
+                : 'text-[var(--text-secondary)]'
+            }`}
+          >
+            <KeyRound className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Passphrase
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <label className="block text-[12px] text-[var(--text-secondary)]">
             Email address
             <input
@@ -78,13 +149,64 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
               Workspace name (optional)
               <input
                 type="text"
-                maxLength={64}
+                maxLength={80}
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
                 placeholder="Clipse Studio"
                 className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </label>
+          )}
+
+          {tab === 'code' ? (
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                disabled={requestCodeMutation.isPending}
+                onClick={handleRequestCode}
+                className="min-h-[40px] w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:border-[var(--accent)] disabled:opacity-50"
+              >
+                {requestCodeMutation.isPending
+                  ? 'Sending verification code...'
+                  : 'Send 6-digit verification code'}
+              </button>
+              <label className="block text-[12px] text-[var(--text-secondary)]">
+                6-digit verification code
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="123456"
+                  className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 font-mono text-[13px] tracking-widest text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                />
+              </label>
+            </div>
+          ) : (
+            <label className="block text-[12px] text-[var(--text-secondary)]">
+              Passphrase (min 8 characters)
+              <input
+                type="password"
+                minLength={8}
+                maxLength={128}
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                placeholder="Enter passphrase"
+                className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              />
+            </label>
+          )}
+
+          {infoMsg && (
+            <div
+              role="status"
+              className="rounded-lg border border-[var(--border)] px-3 py-2 text-[12px]"
+              style={{ backgroundColor: 'var(--success-bg)', color: 'var(--success)' }}
+            >
+              {infoMsg}
+            </div>
           )}
 
           {errorMsg && (
@@ -99,11 +221,11 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
 
           <button
             type="submit"
-            disabled={authMutation.isPending}
+            disabled={loginMutation.isPending}
             className="min-h-[44px] w-full rounded-lg bg-[var(--accent)] px-4 text-[13px] font-semibold text-[#0c1519] disabled:opacity-50"
           >
-            {authMutation.isPending
-              ? 'Authenticating...'
+            {loginMutation.isPending
+              ? 'Verifying...'
               : hasWorkspace
                 ? 'Sign In'
                 : 'Create Workspace'}

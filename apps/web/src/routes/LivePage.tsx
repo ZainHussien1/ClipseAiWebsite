@@ -6,7 +6,14 @@ import { ClaimModal } from '../components/ui/ClaimModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ProviderStatusBar } from '../components/ui/ProviderStatusBar';
 import { fetchLive } from '../lib/api-v1';
-import { formatAgeSeconds, formatCount, formatDurationSince, safeExternalUrl } from '../lib/url';
+import {
+  formatAgeSeconds,
+  formatCount,
+  formatDurationSince,
+  formatProvenance,
+  normalizeHandle,
+  safeExternalUrl,
+} from '../lib/url';
 
 export function LivePage() {
   const queryClient = useQueryClient();
@@ -124,7 +131,7 @@ export function LivePage() {
                         {stream.platform}
                       </span>
                       <span className="font-semibold text-[var(--text-primary)]">
-                        {stream.accountDisplayName || stream.accountHandle}
+                        {stream.accountDisplayName || normalizeHandle(stream.accountHandle)}
                       </span>
                     </div>
                     <h2 className="mt-1.5 line-clamp-2 text-[14px] font-semibold text-[var(--text-strong)]">
@@ -134,7 +141,8 @@ export function LivePage() {
                       <span>Viewers: {formatCount(stream.viewers)}</span>
                       <span>Duration: {formatDurationSince(stream.startedAt)}</span>
                       <span>
-                        {stream.source} · {formatAgeSeconds(stream.ageSeconds)}
+                        {formatProvenance(stream.source, stream.platform)} ·{' '}
+                        {formatAgeSeconds(stream.ageSeconds)}
                       </span>
                     </div>
                   </div>

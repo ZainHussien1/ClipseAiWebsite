@@ -37,15 +37,16 @@ function HealthAuthCard({
         <StatusPill
           status={health?.status ?? (healthLoading ? 'degraded' : 'offline')}
           fetchedAtMs={health?.fetchedAtMs}
-          source={health?.source ?? '/api/v1/health'}
+          lastIngestAt={health?.lastIngestAt}
+          providers={health?.providers}
         />
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5">
           <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-            <span>Edge API Health</span>
-            <span>{health?.source ?? '/api/v1/health'}</span>
+            <span>Edge Runtime</span>
+            <span>{health?.environment ?? 'unknown'}</span>
           </div>
           <dl className="mt-2.5 space-y-1.5 text-[12px]">
             <div className="flex items-center justify-between">
@@ -57,7 +58,7 @@ function HealthAuthCard({
             <div className="flex items-center justify-between">
               <dt className="text-[var(--text-secondary)]">Latency</dt>
               <dd className="font-mono text-[var(--text-primary)]">
-                {health ? `${health.latencyMs} ms` : 'unknown'}
+                {health ? `${health.latencyMs} ms` : 'n/a'}
               </dd>
             </div>
             <div className="flex items-center justify-between">
@@ -73,7 +74,7 @@ function HealthAuthCard({
               <ShieldCheck className="h-3.5 w-3.5 text-[var(--accent)]" strokeWidth={1.5} />
               Auth ({health?.authMode ?? 'session'})
             </span>
-            <span>{me?.source ?? '/api/v1/me'}</span>
+            <span>{me?.source ?? 'Session'}</span>
           </div>
           <dl className="mt-2.5 space-y-1.5 text-[12px]">
             <div className="flex items-center justify-between">
@@ -169,7 +170,7 @@ export function OverviewPage() {
                   <Icon className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
                 </span>
                 <span className="text-[11px] font-medium text-[var(--text-muted)]">
-                  {item.phaseLabel}
+                  {item.section}
                 </span>
               </div>
               <div className="mt-3">

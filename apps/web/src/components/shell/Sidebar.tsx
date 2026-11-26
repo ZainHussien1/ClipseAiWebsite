@@ -4,6 +4,7 @@ import { NAV_ITEMS, type NavItem, type NavSection } from './nav';
 
 interface SidebarProps {
   health: HealthSnapshot | undefined;
+  liveCount: number;
 }
 
 const SECTIONS: NavSection[] = ['WORKSPACE', 'LIVE MODULE'];
@@ -27,8 +28,18 @@ function BrandMark() {
   );
 }
 
-function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
+function SidebarLink({
+  item,
+  active,
+  liveCount,
+}: {
+  item: NavItem;
+  active: boolean;
+  liveCount: number;
+}) {
   const Icon = item.icon;
+  const showLivePill = item.to === '/live' && liveCount >= 1;
+
   return (
     <Link
       to={item.to}
@@ -47,7 +58,7 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
         />
         <span>{item.label}</span>
       </span>
-      {item.badge && (
+      {showLivePill && (
         <span
           className="rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wider"
           style={{
@@ -55,15 +66,24 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
             color: 'var(--danger)',
           }}
         >
-          {item.badge}
+          LIVE {liveCount}
         </span>
       )}
     </Link>
   );
 }
 
-export function Sidebar({ health }: SidebarProps) {
+function formatBuildStamp(iso: string | undefined): string {
+  if (!iso) return 'n/a';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'n/a';
+  return d.toISOString().slice(0, 16).replace('T', ' ') + 'Z';
+}
+
+export function Sidebar({ health, liveCount }: SidebarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const gitSha = import.meta.env.VITE_GIT_SHA ?? 'dev';
+  const buildTime = formatBuildStamp(import.meta.env.VITE_BUILD_TIME);
 
   return (
     <aside
@@ -85,6 +105,7 @@ export function Sidebar({ health }: SidebarProps) {
                     key={item.to}
                     item={item}
                     active={pathname === item.to}
+                    liveCount={liveCount}
                   />
                 ))}
               </div>
@@ -100,8 +121,12 @@ export function Sidebar({ health }: SidebarProps) {
           </span>
         </div>
         <div className="mt-1 flex items-center justify-between">
-          <span>Build</span>
-          <span className="text-[var(--text-secondary)]">Phase 1 Shell</span>
+          <span>Commit</span>
+          <span className="font-mono text-[var(--text-secondary)]">{gitSha}</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between">
+          <span>Built</span>
+          <span className="font-mono text-[10px] text-[var(--text-secondary)]">{buildTime}</span>
         </div>
       </div>
     </aside>

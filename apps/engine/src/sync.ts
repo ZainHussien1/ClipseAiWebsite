@@ -93,6 +93,17 @@ async function syncYouTubeAccount(
     stats = feed.stats;
   }
 
+  const existingCountRow = await db
+    .prepare(
+      `SELECT COUNT(*) AS cnt
+       FROM items i
+       INNER JOIN platform_accounts a ON a.id = i.account_id
+       WHERE a.platform = 'youtube' AND a.external_id = ?`,
+    )
+    .bind(channelId)
+    .first<{ cnt: number }>();
+  const isInitialBackfill = (existingCountRow?.cnt ?? 0) === 0;
+
   const messages: IngestQueueMessage[] = [];
   for (const item of items) {
     messages.push({
@@ -116,6 +127,7 @@ async function syncYouTubeAccount(
         url: item.url,
         thumbnailUrl: item.thumbnailUrl,
         publishedAt: item.publishedAt,
+        isBackfill: isInitialBackfill,
       },
     });
   }
@@ -155,7 +167,9 @@ async function syncYouTubeAccount(
       .run();
   }
 
-  await evaluateAndRecordRisingAlerts(db, channelId, externalId, items, stats, nowIso);
+  if (!isInitialBackfill) {
+    await evaluateAndRecordRisingAlerts(db, channelId, externalId, items, stats, nowIso);
+  }
 
   return {
     ok: true,
@@ -191,25 +205,60 @@ async function evaluateAndRecordRisingAlerts(
   if (workspaceIds.length === 0) return;
 
   const nowMs = Date.parse(nowIso);
+  const sevenDaysAgoIso = new Date(nowMs - 7 * 86_400_000).toISOString();
+  const baselineRes = await db
+    .prepare(
+      `SELECT i.published_at, s.views, s.likes, s.comments
+       FROM items i
+       INNER JOIN platform_accounts a ON a.id = i.account_id
+       INNER JOIN item_stats s ON s.item_id = i.id
+       WHERE a.platform = 'youtube'
+         AND a.external_id = ?
+         AND i.published_at < ?
+       ORDER BY i.published_at DESC
+       LIMIT 20`,
+    )
+    .bind(channelId, sevenDaysAgoIso)
+    .all<{
+      published_at: string;
+      views: number;
+      likes: number | null;
+      comments: number | null;
+    }>();
+
+  const baselineRows = baselineRes.results ?? [];
+  if (baselineRows.length < 5) {
+    // F-01: Do not fire Rising alerts until >=5 historical (>7d) baseline items exist
+    return;
+  }
+
+  const baseline: RisingBaselineSample[] = baselineRows.map((r) => {
+    const itemAgeHours = Math.max(1, (nowMs - Date.parse(r.published_at)) / 3_600_000);
+    const hasEng = r.likes !== null || r.comments !== null;
+    return {
+      viewsPerHour: r.views / itemAgeHours,
+      engagementRate:
+        hasEng && r.views > 0
+          ? ((r.likes ?? 0) + (r.comments ?? 0)) / r.views
+          : null,
+    };
+  });
+
   const statsByExternalId = new Map(stats.map((s) => [s.externalId, s]));
-  const baseline: RisingBaselineSample[] = [];
 
   for (const item of items) {
     const stat = statsByExternalId.get(item.externalId);
     if (!stat) continue;
     const ageHours = Math.max(0.25, (nowMs - Date.parse(item.publishedAt)) / 3_600_000);
     if (ageHours > 72) continue;
-    const viewsPerHour = stat.views / ageHours;
-    const engagementRate = stat.views > 0 ? ((stat.likes ?? 0) + (stat.comments ?? 0)) / stat.views : 0;
 
     const evalResult = evaluateRising({
       ageHours,
       views: stat.views,
-      likes: stat.likes ?? 0,
-      comments: stat.comments ?? 0,
+      likes: stat.likes ?? null,
+      comments: stat.comments ?? null,
       creatorBaseline: baseline,
     });
-    baseline.push({ viewsPerHour, engagementRate });
 
     if (evalResult.tier === 'none') continue;
 
@@ -244,6 +293,14 @@ async function evaluateAndRecordRisingAlerts(
           }),
           nowIso,
         )
+        .run();
+
+      await db
+        .prepare(
+          `INSERT INTO alert_deliveries (id, workspace_id, alert_id, channel, status, reason, attempted_at)
+           VALUES (?, ?, ?, 'in_app', 'recorded', ?, ?)`,
+        )
+        .bind(`deliv:${alertId}`, workspaceId, alertId, evalResult.reason, nowIso)
         .run();
     }
   }

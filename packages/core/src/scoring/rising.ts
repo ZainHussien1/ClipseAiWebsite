@@ -2,14 +2,14 @@ import type { RisingTier } from '../api-schemas.js';
 
 export interface RisingBaselineSample {
   readonly viewsPerHour: number;
-  readonly engagementRate: number;
+  readonly engagementRate?: number | null;
 }
 
 export interface RisingInput {
   readonly ageHours: number;
   readonly views: number;
-  readonly likes: number;
-  readonly comments: number;
+  readonly likes?: number | null;
+  readonly comments?: number | null;
   readonly recentViewsPerHour?: number;
   readonly earlierViewsPerHour?: number;
   readonly creatorBaseline: readonly RisingBaselineSample[];
@@ -55,7 +55,7 @@ export interface RisingEvaluation {
   readonly score: number;
   readonly velocityRatio: number;
   readonly acceleration: number;
-  readonly engagementRatio: number;
+  readonly engagementRatio: number | null;
   readonly madZScore: number;
   readonly usedColdStart: boolean;
   readonly reason: string;
@@ -115,24 +115,34 @@ export function evaluateRising(
 ): RisingEvaluation {
   const safeAgeHours = Math.max(input.ageHours, 0.25);
   const currentVph = Math.max(0, input.views) / safeAgeHours;
+  const hasEngagement =
+    (input.likes !== null && input.likes !== undefined) ||
+    (input.comments !== null && input.comments !== undefined);
   const currentEng =
-    input.views > 0
-      ? (Math.max(0, input.likes) + Math.max(0, input.comments)) / input.views
-      : 0;
+    hasEngagement && input.views > 0
+      ? (Math.max(0, input.likes ?? 0) + Math.max(0, input.comments ?? 0)) /
+        input.views
+      : null;
 
   const usedColdStart = input.creatorBaseline.length < config.minBaselineSamples;
   const vphSamples = input.creatorBaseline.map((s) => Math.max(0, s.viewsPerHour));
-  const engSamples = input.creatorBaseline.map((s) => Math.max(0, s.engagementRate));
+  const engSamples = input.creatorBaseline
+    .map((s) => s.engagementRate)
+    .filter((v): v is number => v !== null && v !== undefined)
+    .map((v) => Math.max(0, v));
 
   const baselineVph = usedColdStart ? config.coldStartVph : median(vphSamples);
-  const baselineEng = usedColdStart ? config.coldStartEngagement : median(engSamples);
+  const baselineEng =
+    usedColdStart || engSamples.length === 0
+      ? config.coldStartEngagement
+      : median(engSamples);
   const vphMad = usedColdStart ? 0 : medianAbsoluteDeviation(vphSamples, baselineVph);
 
   const denomVph = Math.max(baselineVph, config.minDenominatorVph);
   const denomEng = Math.max(baselineEng, config.minDenominatorEngagement);
 
   const velocityRatio = currentVph / denomVph;
-  const engagementRatio = currentEng / denomEng;
+  const engagementRatio = currentEng !== null ? currentEng / denomEng : null;
   const acceleration =
     input.recentViewsPerHour !== undefined && input.earlierViewsPerHour !== undefined
       ? Math.max(0, input.recentViewsPerHour) /
@@ -142,24 +152,31 @@ export function evaluateRising(
   const madScale = Math.max(1.4826 * vphMad, config.minDenominatorVph);
   const madZScore = (currentVph - baselineVph) / madScale;
 
+  const nonEngWeightSum = config.weights.velocity + config.weights.acceleration;
   const score =
-    config.weights.velocity * velocityRatio +
-    config.weights.acceleration * acceleration +
-    config.weights.engagement * engagementRatio;
+    engagementRatio !== null
+      ? config.weights.velocity * velocityRatio +
+        config.weights.acceleration * acceleration +
+        config.weights.engagement * engagementRatio
+      : (config.weights.velocity * velocityRatio +
+          config.weights.acceleration * acceleration) /
+        (nonEngWeightSum > 0 ? nonEngWeightSum : 1);
 
   const tier = resolveTierWithHysteresis(score, input.previousTier ?? 'none', config);
   const ageLabel = formatAgeLabel(safeAgeHours);
   const velText = `${velocityRatio.toFixed(1)}x`;
-  const engText = `${engagementRatio.toFixed(1)}x`;
+  const engText =
+    engagementRatio !== null ? `${engagementRatio.toFixed(1)}x engagement` : 'engagement n/a';
   const baselineLabel = usedColdStart ? 'cross-creator baseline' : "this creator's usual";
-  const reason = `${velText} ${baselineLabel} at ${ageLabel} (${engText} engagement)`;
+  const reason = `${velText} ${baselineLabel} at ${ageLabel} (${engText})`;
 
   return {
     tier,
     score: Math.round(score * 100) / 100,
     velocityRatio: Math.round(velocityRatio * 100) / 100,
     acceleration: Math.round(acceleration * 100) / 100,
-    engagementRatio: Math.round(engagementRatio * 100) / 100,
+    engagementRatio:
+      engagementRatio !== null ? Math.round(engagementRatio * 100) / 100 : null,
     madZScore: Math.round(madZScore * 100) / 100,
     usedColdStart,
     reason,

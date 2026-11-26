@@ -3,7 +3,10 @@ import {
   AppError,
   claimStatusSchema,
   feedQuerySchema,
+  formatProviderSource,
+  normalizeHandle,
   type FeedItem,
+  type ItemClaimInfo,
 } from '@clipse/core';
 import { z } from 'zod';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
@@ -26,10 +29,16 @@ interface FeedRow {
   thumbnail_url: string | null;
   published_at: string;
   first_seen_at: string;
+  is_backfill: number;
+  duration_sec: number | null;
   latest_views: number | null;
   latest_likes: number | null;
   latest_comments: number | null;
+  snapshot_count: number;
+  claim_id: string | null;
   claim_status: string | null;
+  claim_user_id: string | null;
+  claim_user_email: string | null;
 }
 
 function encodeCursor(publishedAt: string, id: string): string {
@@ -38,8 +47,7 @@ function encodeCursor(publishedAt: string, id: string): string {
 
 function decodeCursor(raw: string): { p: string; id: string } {
   try {
-    const parsed = cursorPayloadSchema.parse(JSON.parse(atob(raw)));
-    return parsed;
+    return cursorPayloadSchema.parse(JSON.parse(atob(raw)));
   } catch {
     throw AppError.badRequest('Invalid pagination cursor');
   }
@@ -63,7 +71,12 @@ export function createFeedRouter() {
       'f.archived = 0',
       'f.paused = 0',
     ];
-    const params: unknown[] = [principal.workspaceId, principal.workspaceId];
+    const params: unknown[] = [
+      principal.workspaceId,
+      principal.workspaceId,
+      principal.workspaceId,
+      principal.workspaceId,
+    ];
 
     if (platform) {
       conditions.push('i.platform = ?');
@@ -94,11 +107,15 @@ export function createFeedRouter() {
     const sql = `
       SELECT i.id, i.account_id, a.handle AS account_handle, a.display_name AS account_display_name,
              i.platform, i.external_id, i.kind, i.title, i.url, i.thumbnail_url,
-             i.published_at, i.first_seen_at,
+             i.published_at, i.first_seen_at, i.is_backfill, i.duration_sec,
              (SELECT s.views FROM item_stats s WHERE s.item_id = i.id ORDER BY s.captured_at DESC LIMIT 1) AS latest_views,
              (SELECT s.likes FROM item_stats s WHERE s.item_id = i.id ORDER BY s.captured_at DESC LIMIT 1) AS latest_likes,
              (SELECT s.comments FROM item_stats s WHERE s.item_id = i.id ORDER BY s.captured_at DESC LIMIT 1) AS latest_comments,
-             (SELECT cl.status FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id ORDER BY cl.updated_at DESC LIMIT 1) AS claim_status
+             (SELECT COUNT(*) FROM item_stats s WHERE s.item_id = i.id) AS snapshot_count,
+             (SELECT cl.id FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipped') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_id,
+             (SELECT cl.status FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipped') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_status,
+             (SELECT cl.user_id FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipped') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_user_id,
+             NULL AS claim_user_email
       FROM items i
       JOIN platform_accounts a ON a.id = i.account_id
       JOIN follows f ON f.account_id = a.id
@@ -107,11 +124,22 @@ export function createFeedRouter() {
       LIMIT ?
     `;
 
-    const result = await c.env.DB.prepare(sql).bind(...params).all<FeedRow>();
+    const [result, membersRes] = await Promise.all([
+      c.env.DB.prepare(sql).bind(...params).all<FeedRow>(),
+      c.env.DB.prepare('SELECT user_id, email FROM memberships WHERE workspace_id = ?')
+        .bind(principal.workspaceId)
+        .all<{ user_id: string; email: string }>(),
+    ]);
+
+    const emailByUserId = new Map(
+      (membersRes.results ?? []).map((m) => [m.user_id, m.email]),
+    );
+
     const rows = result.results ?? [];
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const nowMs = Date.now();
+    const hasYtApiKey = Boolean(c.env.YOUTUBE_API_KEY);
 
     const items: FeedItem[] = pageRows.map((r) => {
       const pubMs = Date.parse(r.published_at);
@@ -126,11 +154,21 @@ export function createFeedRouter() {
       const parsedClaim = r.claim_status
         ? claimStatusSchema.safeParse(r.claim_status)
         : null;
+      const claim: ItemClaimInfo | null =
+        r.claim_id && parsedClaim?.success && r.claim_user_id
+          ? {
+              id: r.claim_id,
+              status: parsedClaim.data,
+              userId: r.claim_user_id,
+              email: emailByUserId.get(r.claim_user_id) ?? null,
+              claimedByMe: r.claim_user_id === principal.userId,
+            }
+          : null;
 
       return {
         id: r.id,
         accountId: r.account_id,
-        accountHandle: r.account_handle,
+        accountHandle: normalizeHandle(r.account_handle),
         accountDisplayName: r.account_display_name,
         platform: r.platform,
         externalId: r.external_id,
@@ -140,23 +178,28 @@ export function createFeedRouter() {
         thumbnailUrl: r.thumbnail_url,
         publishedAt: r.published_at,
         firstSeenAt: r.first_seen_at,
+        isBackfill: r.is_backfill === 1,
+        durationSec: r.duration_sec,
         ingestLatencyMs: latency,
         latestViews: r.latest_views,
         latestLikes: r.latest_likes,
         latestComments: r.latest_comments,
+        snapshotCount: r.snapshot_count ?? 0,
         claimStatus: parsedClaim?.success ? parsedClaim.data : null,
-        source: 'd1',
+        claim,
+        source: formatProviderSource(r.platform, hasYtApiKey),
         ageSeconds,
       };
     });
 
     const last = pageRows[pageRows.length - 1];
     const nextCursor = hasMore && last ? encodeCursor(last.published_at, last.id) : null;
+    const responseSource = items[0]?.source ?? (hasYtApiKey ? 'YouTube API' : 'YouTube RSS');
 
     return c.json({
       items,
       nextCursor,
-      source: 'd1',
+      source: responseSource,
       asOf: new Date(nowMs).toISOString(),
     });
   });

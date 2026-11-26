@@ -33,8 +33,6 @@ export interface NavItem {
   label: string;
   section: NavSection;
   icon: LucideIcon;
-  badge?: string;
-  phaseLabel: string;
   description: string;
 }
 
@@ -44,15 +42,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Overview',
     section: 'WORKSPACE',
     icon: Home,
-    phaseLabel: 'Phase 1 active',
-    description: 'System health, Cloudflare Access identity, and workspace status.',
+    description: 'System health, Access identity, and workspace status.',
   },
   {
     to: '/feed',
     label: 'Feed',
     section: 'WORKSPACE',
     icon: Rss,
-    phaseLabel: 'Phase 3 active',
     description: 'Unified creator upload & stream feed with first-seen latency stamps.',
   },
   {
@@ -60,7 +56,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Rising',
     section: 'WORKSPACE',
     icon: TrendingUp,
-    phaseLabel: 'Phase 3 active',
     description: 'Velocity & engagement breakout detector with hysteresis.',
   },
   {
@@ -68,7 +63,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Alerts',
     section: 'WORKSPACE',
     icon: BellRing,
-    phaseLabel: 'Phase 4 active',
     description: 'Evidence-backed Rising, Live Moment, and VOD-ready alerts with voting.',
   },
   {
@@ -76,7 +70,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Sources',
     section: 'WORKSPACE',
     icon: Users,
-    phaseLabel: 'Phase 3 active',
     description: 'Tracked YouTube, Twitch, and Kick creator channels.',
   },
   {
@@ -84,7 +77,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'My Work',
     section: 'WORKSPACE',
     icon: ClipboardCheck,
-    phaseLabel: 'Phase 3 active',
     description: 'Active item & time-range claims with optimistic workflow transitions.',
   },
   {
@@ -92,7 +84,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Notifications',
     section: 'WORKSPACE',
     icon: Bell,
-    phaseLabel: 'Phase 4 active',
     description: 'Notification inbox, quiet hours, hourly budget, Discord, and Web Push.',
   },
   {
@@ -100,7 +91,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Clip Log',
     section: 'WORKSPACE',
     icon: Scissors,
-    phaseLabel: 'Phase 5 active',
     description: 'Claimed moments, published clips, Our Channels, and manual vs API stats.',
   },
   {
@@ -108,7 +98,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Reports',
     section: 'WORKSPACE',
     icon: FileBarChart2,
-    phaseLabel: 'Phase 5 active',
     description: 'Daily report, source ROI, and accuracy scorecard.',
   },
   {
@@ -116,7 +105,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Settings',
     section: 'WORKSPACE',
     icon: Settings,
-    phaseLabel: 'Phase 5 active',
     description: 'Workspace members, JSON/CSV export, and atomic workspace deletion.',
   },
   {
@@ -124,8 +112,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Live Now',
     section: 'LIVE MODULE',
     icon: Radio,
-    badge: 'LIVE',
-    phaseLabel: 'Phase 3 active',
     description: 'Real-time live stream monitor and viewer/clip moment alerts.',
   },
 ];

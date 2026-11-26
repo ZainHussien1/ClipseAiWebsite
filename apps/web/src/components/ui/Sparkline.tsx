@@ -1,16 +1,22 @@
 interface SparklineProps {
   values: number[];
+  snapshotCount: number;
   color?: string;
   label: string;
 }
 
 export function Sparkline({
   values,
+  snapshotCount,
   color = 'var(--accent)',
   label,
 }: SparklineProps) {
-  if (values.length < 2) {
-    return null;
+  if (snapshotCount < 3 || values.length < 3) {
+    return (
+      <span className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-[11px] text-[var(--text-muted)]">
+        Collecting snapshots ({snapshotCount}/3)
+      </span>
+    );
   }
 
   const width = 96;

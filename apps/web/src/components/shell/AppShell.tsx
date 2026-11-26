@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchAuthStatus, fetchHealth, logoutSession, type SystemStatus } from '../../lib/api';
-import { listNotifications } from '../../lib/api-v1';
+import { fetchLive, listNotifications } from '../../lib/api-v1';
 import { useOnlineStatus } from '../../lib/useOnlineStatus';
 import { CommandPalette } from './CommandPalette';
 import { MobileNav } from './MobileNav';
@@ -42,7 +42,16 @@ export function AppShell() {
     retry: false,
   });
 
+  const liveQuery = useQuery({
+    queryKey: ['live'],
+    queryFn: fetchLive,
+    enabled: authReady,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+
   const unreadCount = (notifQuery.data?.notifications ?? []).filter((n) => !n.readAt).length;
+  const liveCount = liveQuery.data?.liveCount ?? 0;
 
   const effectiveStatus: SystemStatus = !isOnline
     ? 'offline'
@@ -57,6 +66,7 @@ export function AppShell() {
       void queryClient.invalidateQueries({ queryKey: ['auth', 'status'] });
       void queryClient.invalidateQueries({ queryKey: ['system', 'me'] });
       queryClient.removeQueries({ queryKey: ['notifications'] });
+      queryClient.removeQueries({ queryKey: ['live'] });
     });
   }, [queryClient]);
 
@@ -73,7 +83,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh bg-[var(--bg)] text-[var(--text-primary)]">
-      <Sidebar health={healthQuery.data} />
+      <Sidebar health={healthQuery.data} liveCount={liveCount} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
@@ -109,6 +119,7 @@ export function AppShell() {
 
       <MobileNav
         drawerOpen={drawerOpen}
+        liveCount={liveCount}
         onOpenDrawer={() => setDrawerOpen(true)}
         onCloseDrawer={() => setDrawerOpen(false)}
       />

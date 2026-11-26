@@ -85,6 +85,15 @@ export const feedQuerySchema = z.object({
 });
 export type FeedQuery = z.infer<typeof feedQuerySchema>;
 
+export const itemClaimInfoSchema = z.object({
+  id: z.string(),
+  status: claimStatusSchema,
+  userId: z.string(),
+  email: z.string().nullable(),
+  claimedByMe: z.boolean(),
+});
+export type ItemClaimInfo = z.infer<typeof itemClaimInfoSchema>;
+
 export const feedItemSchema = z.object({
   id: z.string(),
   accountId: z.string(),
@@ -98,11 +107,15 @@ export const feedItemSchema = z.object({
   thumbnailUrl: z.string().nullable(),
   publishedAt: z.string(),
   firstSeenAt: z.string(),
+  isBackfill: z.boolean(),
+  durationSec: z.number().int().nonnegative().nullable(),
   ingestLatencyMs: z.number().int().nonnegative().nullable(),
   latestViews: z.number().int().nonnegative().nullable(),
   latestLikes: z.number().int().nonnegative().nullable(),
   latestComments: z.number().int().nonnegative().nullable(),
+  snapshotCount: z.number().int().nonnegative(),
   claimStatus: claimStatusSchema.nullable(),
+  claim: itemClaimInfoSchema.nullable(),
   source: z.string(),
   ageSeconds: z.number().int().nonnegative(),
 });
@@ -136,6 +149,7 @@ export type LiveStream = z.infer<typeof liveStreamSchema>;
 
 export const liveResponseSchema = z.object({
   streams: z.array(liveStreamSchema),
+  liveCount: z.number().int().nonnegative(),
   source: z.string(),
   asOf: z.string(),
 });
@@ -160,11 +174,15 @@ export const risingItemSchema = z.object({
   url: z.string(),
   thumbnailUrl: z.string().nullable(),
   publishedAt: z.string(),
+  isBackfill: z.boolean(),
   tier: risingTierSchema.exclude(['none']),
   score: z.number(),
   velocityRatio: z.number(),
-  engagementRatio: z.number(),
+  engagementRatio: z.number().nullable(),
   reason: z.string(),
+  snapshotCount: z.number().int().nonnegative(),
+  snapshots: z.array(z.number().nonnegative()).optional(),
+  claim: itemClaimInfoSchema.nullable(),
   source: z.string(),
   ageSeconds: z.number().int().nonnegative(),
 });
@@ -451,3 +469,29 @@ export const exportFormatSchema = z.object({
   format: z.enum(['json', 'csv']).default('json'),
 });
 export type ExportFormatInput = z.infer<typeof exportFormatSchema>;
+
+export const requestCodeSchema = z.object({
+  email: z.string().trim().email().max(254),
+});
+export type RequestCodeInput = z.infer<typeof requestCodeSchema>;
+
+export const loginSchema = z
+  .object({
+    email: z.string().trim().email().max(254),
+    workspaceName: z.string().trim().min(1).max(80).optional(),
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, 'Verification code must be 6 digits')
+      .optional(),
+    passphrase: z.string().min(8).max(128).optional(),
+  })
+  .refine((v) => Boolean(v.code || v.passphrase), {
+    message: 'Provide either a 6-digit verification code or a passphrase',
+  });
+export type LoginInput = z.infer<typeof loginSchema>;
+
+export const setPassphraseSchema = z.object({
+  passphrase: z.string().min(8).max(128),
+});
+export type SetPassphraseInput = z.infer<typeof setPassphraseSchema>;

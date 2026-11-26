@@ -7,6 +7,7 @@ import {
   type Role,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
+import { requireWriterRole } from '../auth.js';
 
 interface MemberRow {
   id: string;
@@ -145,6 +146,7 @@ export function createSettingsRouter() {
 
   router.post('/export', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const body = exportFormatSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) {
       throw AppError.badRequest('Invalid export format', body.error.flatten());

@@ -3,6 +3,7 @@ import {
   AppError,
   bulkCreateSourcesSchema,
   createSourceSchema,
+  normalizeHandle,
   parseSourceInput,
   sourceRuleSchema,
   updateSourceSchema,
@@ -11,6 +12,7 @@ import {
   type SourceRule,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables, EngineSyncResult } from '../app.js';
+import { requireWriterRole } from '../auth.js';
 
 async function syncAccountViaEngine(
   env: EdgeBindings,
@@ -150,7 +152,7 @@ function mapFollowRow(row: FollowRow): SourceItem {
     accountId: row.account_id,
     platform: row.platform,
     externalId: row.external_id,
-    handle: row.handle,
+    handle: normalizeHandle(row.handle),
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
     starred: row.starred === 1,
@@ -272,6 +274,7 @@ export function createSourcesRouter() {
 
   router.post('/', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const body = createSourceSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       throw AppError.badRequest('Invalid source payload', body.error.flatten());
@@ -301,6 +304,7 @@ export function createSourcesRouter() {
 
   router.post('/sync-all', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const rows = await c.env.DB.prepare(
       `SELECT f.id AS follow_id, a.id AS account_id, a.platform, a.external_id
        FROM follows f
@@ -343,6 +347,7 @@ export function createSourcesRouter() {
 
   router.post('/:followId/sync', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const followId = c.req.param('followId');
 
     const row = await c.env.DB.prepare(
@@ -376,6 +381,7 @@ export function createSourcesRouter() {
 
   router.post('/bulk', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const body = bulkCreateSourcesSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       throw AppError.badRequest('Invalid bulk source payload', body.error.flatten());
@@ -421,6 +427,7 @@ export function createSourcesRouter() {
 
   router.patch('/:followId', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const followId = c.req.param('followId');
     const body = updateSourceSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
@@ -484,6 +491,7 @@ export function createSourcesRouter() {
 
   router.delete('/:followId', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const followId = c.req.param('followId');
 
     const res = await c.env.DB.prepare(

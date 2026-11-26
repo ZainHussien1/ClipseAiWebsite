@@ -78,13 +78,16 @@ async function upsertItem(
 
   await db
     .prepare(
-      `INSERT INTO items (id, account_id, platform, external_id, kind, title, url, thumbnail_url, published_at, first_seen_at, raw_refreshed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO items (id, account_id, platform, external_id, kind, title, url, thumbnail_url, published_at, first_seen_at, raw_refreshed_at, is_backfill, duration_sec, shorts_classification, last_synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(platform, external_id) DO UPDATE SET
          kind = CASE WHEN excluded.raw_refreshed_at >= items.raw_refreshed_at THEN excluded.kind ELSE items.kind END,
          title = CASE WHEN excluded.raw_refreshed_at >= items.raw_refreshed_at THEN excluded.title ELSE items.title END,
          url = CASE WHEN excluded.raw_refreshed_at >= items.raw_refreshed_at THEN excluded.url ELSE items.url END,
          thumbnail_url = COALESCE(excluded.thumbnail_url, items.thumbnail_url),
+         duration_sec = COALESCE(excluded.duration_sec, items.duration_sec),
+         shorts_classification = COALESCE(excluded.shorts_classification, items.shorts_classification),
+         last_synced_at = CASE WHEN excluded.raw_refreshed_at >= items.raw_refreshed_at THEN excluded.raw_refreshed_at ELSE items.last_synced_at END,
          raw_refreshed_at = CASE WHEN excluded.raw_refreshed_at >= items.raw_refreshed_at THEN excluded.raw_refreshed_at ELSE items.raw_refreshed_at END`,
     )
     .bind(
@@ -98,6 +101,10 @@ async function upsertItem(
       item.thumbnailUrl ?? null,
       item.publishedAt,
       receivedAt,
+      receivedAt,
+      item.isBackfill ? 1 : 0,
+      item.durationSec ?? null,
+      item.shortsClassification ?? null,
       receivedAt,
     )
     .run();

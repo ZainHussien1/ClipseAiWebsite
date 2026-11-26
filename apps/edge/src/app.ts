@@ -115,7 +115,18 @@ export function createApp(deps: AppDependencies = {}) {
   app.route('/hooks/twitch', createTwitchHooksRouter());
   app.route('/hooks/kick', createKickHooksRouter());
 
-  // Auth status / session bootstrap (outside authMiddleware, inside CSRF)
+  const authMiddleware: MiddlewareHandler<{
+    Bindings: EdgeBindings;
+    Variables: EdgeVariables;
+  }> = async (c, next) => {
+    const { provider, token } = getAuthRequestContext(c.env, c.req.raw, deps);
+    const principal = await resolvePrincipal(c.env.DB, provider, token);
+    c.set('principal', principal);
+    await next();
+  };
+
+  // Auth status / session bootstrap (outside authMiddleware except /passphrase, inside CSRF)
+  app.use('/api/v1/auth/passphrase', authMiddleware);
   app.route('/api/v1/auth', createAuthRouter());
 
   app.onError((err, c) => {
@@ -159,8 +170,13 @@ export function createApp(deps: AppDependencies = {}) {
     const authConfigured = authMode === 'access' || sessionConfigured;
 
     let status: HealthStatus = 'ok';
+    let lastIngestAt: string | null = null;
     try {
       await c.env.DB.prepare('SELECT 1 AS ok').first();
+      const ingestRow = await c.env.DB.prepare(
+        'SELECT MAX(first_seen_at) AS last_ingest_at FROM items',
+      ).first<{ last_ingest_at: string | null }>();
+      lastIngestAt = ingestRow?.last_ingest_at ?? null;
     } catch {
       status = 'degraded';
     }
@@ -172,25 +188,29 @@ export function createApp(deps: AppDependencies = {}) {
       status = 'degraded';
     }
 
+    const providers = {
+      youtube: c.env.YOUTUBE_API_KEY ? 'YouTube API' : 'YouTube RSS',
+      twitch:
+        c.env.TWITCH_CLIENT_ID && c.env.TWITCH_CLIENT_SECRET
+          ? 'Twitch Helix'
+          : 'credentials_missing',
+      kick:
+        c.env.KICK_CLIENT_ID && c.env.KICK_CLIENT_SECRET
+          ? 'Kick API'
+          : 'credentials_missing',
+    };
+
     return c.json({
       status,
       authMode,
       environment: c.env.ENVIRONMENT ?? 'local',
       authConfigured,
       source: 'edge',
+      providers,
+      lastIngestAt,
       checkedAt: new Date().toISOString(),
     });
   });
-
-  const authMiddleware: MiddlewareHandler<{
-    Bindings: EdgeBindings;
-    Variables: EdgeVariables;
-  }> = async (c, next) => {
-    const { provider, token } = getAuthRequestContext(c.env, c.req.raw, deps);
-    const principal = await resolvePrincipal(c.env.DB, provider, token);
-    c.set('principal', principal);
-    await next();
-  };
 
   app.use('/api/v1/me', authMiddleware);
   app.use('/api/v1/workspaces/*', authMiddleware);

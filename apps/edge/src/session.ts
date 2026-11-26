@@ -73,6 +73,71 @@ export function parseCookie(cookieHeader: string | undefined, name: string): str
   return undefined;
 }
 
+export async function hashOtpCode(code: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(code.trim()),
+  );
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function hashPassphrase(passphrase: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(passphrase),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const derived = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+    key,
+    256,
+  );
+  return `pbkdf2$100000$${toBase64Url(salt)}$${toBase64Url(new Uint8Array(derived))}`;
+}
+
+export async function verifyPassphrase(
+  passphrase: string,
+  storedHash: string,
+): Promise<boolean> {
+  const parts = storedHash.split('$');
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') {
+    return false;
+  }
+  const iterations = Number(parts[1]);
+  if (!Number.isInteger(iterations) || iterations < 10_000 || iterations > 500_000) {
+    return false;
+  }
+  try {
+    const salt = fromBase64Url(parts[2] ?? '');
+    const expected = fromBase64Url(parts[3] ?? '');
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(passphrase),
+      'PBKDF2',
+      false,
+      ['deriveBits'],
+    );
+    const derived = new Uint8Array(
+      await crypto.subtle.deriveBits(
+        { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+        key,
+        expected.length * 8,
+      ),
+    );
+    if (derived.length !== expected.length) return false;
+    let diff = 0;
+    for (let i = 0; i < derived.length; i += 1) {
+      diff |= (derived[i] ?? 0) ^ (expected[i] ?? 0);
+    }
+    return diff === 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function signSessionToken(
   identity: { sub: string; email: string },
   secret: string,

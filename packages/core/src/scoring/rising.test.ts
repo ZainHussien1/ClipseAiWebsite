@@ -117,7 +117,20 @@ describe('evaluateRising', () => {
     });
     expect(Number.isFinite(res.score)).toBe(true);
     expect(Number.isFinite(res.velocityRatio)).toBe(true);
-    expect(Number.isFinite(res.engagementRatio)).toBe(true);
+    expect(res.engagementRatio).toBeNull();
     expect(res.tier).toBe('none');
+  });
+
+  it('returns null engagementRatio and omits fake 0.0x when likes and comments are unknown', () => {
+    const res = evaluateRising({
+      ageHours: 2,
+      views: 700,
+      likes: null,
+      comments: null,
+      creatorBaseline: creatorSamples,
+    });
+    expect(res.engagementRatio).toBeNull();
+    expect(res.reason).toContain('engagement n/a');
+    expect(res.reason).not.toContain('0.0x');
   });
 });

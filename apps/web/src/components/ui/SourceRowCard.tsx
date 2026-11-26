@@ -1,6 +1,6 @@
 import { Archive, Pause, Play, RefreshCw, Star } from 'lucide-react';
 import type { SourceItem } from '../../lib/contracts';
-import { formatAgeSeconds } from '../../lib/url';
+import { formatAgeSeconds, formatProvenance, normalizeHandle } from '../../lib/url';
 import { Card } from './Card';
 
 interface SourceRowCardProps {
@@ -25,9 +25,11 @@ export function SourceRowCard({ src, onSync, onPatch }: SourceRowCardProps) {
             {src.platform}
           </span>
           <span className="truncate text-[13px] font-semibold text-[var(--text-strong)]">
-            {src.displayName || src.handle}
+            {src.displayName || normalizeHandle(src.handle)}
           </span>
-          <span className="font-mono text-[11px] text-[var(--text-muted)]">@{src.handle}</span>
+          <span className="font-mono text-[11px] text-[var(--text-muted)]">
+            {normalizeHandle(src.handle)}
+          </span>
           {src.groupName && (
             <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
               {src.groupName}
@@ -35,8 +37,8 @@ export function SourceRowCard({ src, onSync, onPatch }: SourceRowCardProps) {
           )}
         </div>
         <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-          Last synced: {syncAgeSec !== null ? formatAgeSeconds(syncAgeSec) : 'never'} ·
-          /api/v1/sources
+          {formatProvenance(undefined, src.platform)} · Last synced:{' '}
+          {syncAgeSec !== null ? formatAgeSeconds(syncAgeSec) : 'never'}
         </div>
       </div>
 

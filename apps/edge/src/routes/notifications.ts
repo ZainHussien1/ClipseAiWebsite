@@ -11,6 +11,7 @@ import {
   type NotificationTier,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
+import { requireWriterRole } from '../auth.js';
 import { encryptSecret } from '../crypto.js';
 
 interface NotificationRow {
@@ -112,6 +113,7 @@ export function createNotificationsRouter() {
 
   router.post('/:id/read', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const id = c.req.param('id');
     const now = new Date().toISOString();
 
@@ -132,6 +134,7 @@ export function createNotificationsRouter() {
 
   router.put('/prefs', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const body = notificationPrefsSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       throw AppError.badRequest('Invalid notification preferences', body.error.flatten());
@@ -168,6 +171,7 @@ export function createNotificationsRouter() {
 
   router.post('/push', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const body = pushSubscriptionSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       throw AppError.badRequest('Invalid push subscription', body.error.flatten());

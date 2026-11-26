@@ -20,6 +20,7 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Permissions-Policy':
     'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'X-Robots-Tag': 'noindex',
 };
 
 export const securityHeadersMiddleware: MiddlewareHandler = async (c, next) => {

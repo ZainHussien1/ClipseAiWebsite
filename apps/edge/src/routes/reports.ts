@@ -125,7 +125,7 @@ export function createReportsRouter() {
         `SELECT AVG((julianday(i.first_seen_at) - julianday(i.published_at)) * 86400000.0) AS avg_ms
          FROM alerts al
          JOIN items i ON i.id = al.item_id
-         WHERE al.workspace_id = ?`,
+         WHERE al.workspace_id = ? AND i.is_backfill = 0`,
       )
         .bind(principal.workspaceId)
         .first<{ avg_ms: number | null }>(),

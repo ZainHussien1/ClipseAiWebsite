@@ -27,6 +27,9 @@ export const ingestItemPayloadSchema = z.object({
     .optional(),
   publishedAt: z.string().datetime({ offset: true }),
   isEdit: z.boolean().optional(),
+  isBackfill: z.boolean().optional(),
+  durationSec: z.number().int().nonnegative().optional(),
+  shortsClassification: z.enum(['video', 'short', 'live', 'unclassified']).optional(),
 });
 
 export const ingestStatsPayloadSchema = z.object({

@@ -7,6 +7,7 @@ import {
   type ClipRecord,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
+import { requireWriterRole } from '../auth.js';
 
 interface ClipRow {
   id: string;
@@ -111,6 +112,7 @@ export function createClipsRouter() {
 
   router.post('/', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const body = createClipSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       throw AppError.badRequest('Invalid clip payload', body.error.flatten());
@@ -217,6 +219,7 @@ export function createClipsRouter() {
 
   router.post('/:id/confirm-link', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const clipId = c.req.param('id');
     const body = confirmClipLinkSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {

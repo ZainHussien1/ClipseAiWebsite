@@ -192,6 +192,12 @@ export async function updateClaim(
   });
 }
 
+export async function deleteClaim(claimId: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/claims/${encodeURIComponent(claimId)}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function listAlerts(): Promise<AlertItem[]> {
   const data = await requestJson<{ alerts?: AlertItem[]; items?: AlertItem[] } | AlertItem[]>(
     '/api/v1/alerts',

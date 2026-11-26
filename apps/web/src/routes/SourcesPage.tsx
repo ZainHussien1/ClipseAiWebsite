@@ -151,7 +151,7 @@ export function SourcesPage() {
             onChange={(e) => setSingleInput(e.target.value)}
             placeholder="https://youtube.com/@MKBHD, twitch.tv/channel, or kick.com/channel"
             aria-label="Channel URL or handle"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] sm:col-span-5"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] sm:col-span-5"
           />
           <input
             type="text"
@@ -159,7 +159,7 @@ export function SourcesPage() {
             onChange={(e) => setGroupName(e.target.value)}
             placeholder="Group (optional)"
             aria-label="Group name"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] sm:col-span-3"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] sm:col-span-3"
           />
           <input
             type="text"
@@ -167,7 +167,7 @@ export function SourcesPage() {
             onChange={(e) => setTagsInput(e.target.value)}
             placeholder="Tags, comma-separated"
             aria-label="Tags"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] sm:col-span-2"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] sm:col-span-2"
           />
           <button
             type="submit"
@@ -187,7 +187,7 @@ export function SourcesPage() {
               onChange={(e) => setBulkLines(e.target.value)}
               placeholder="Paste one channel URL or CSV line per row..."
               aria-label="Bulk channel list"
-              className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] p-3 font-mono text-[12px] text-[var(--text-primary)]"
+              className="w-full min-w-0 rounded-lg border border-[var(--input-border)] bg-[var(--input)] p-3 font-mono text-[12px] text-[var(--text-primary)]"
             />
             <div className="flex justify-end">
               <button
@@ -218,7 +218,11 @@ export function SourcesPage() {
         <EmptyState
           icon={Users}
           title={showArchived ? 'No archived sources' : 'No tracked sources yet'}
-          description="Paste a YouTube, Twitch, or Kick channel URL above, or click a suggestion to prefill the input."
+          description={
+            showArchived
+              ? 'Archived sources will appear here.'
+              : 'Paste a YouTube, Twitch, or Kick channel URL above, or choose a sample creator below.'
+          }
           action={
             !showArchived && (
               <div className="flex flex-wrap justify-center gap-2">

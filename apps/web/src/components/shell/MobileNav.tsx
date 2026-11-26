@@ -4,13 +4,19 @@ import { NAV_ITEMS } from './nav';
 
 interface MobileNavProps {
   drawerOpen: boolean;
+  liveCount: number;
   onCloseDrawer: () => void;
   onOpenDrawer: () => void;
 }
 
 const PRIMARY_MOBILE_ROUTES = new Set(['/', '/feed', '/live', '/rising']);
 
-export function MobileNav({ drawerOpen, onCloseDrawer, onOpenDrawer }: MobileNavProps) {
+export function MobileNav({
+  drawerOpen,
+  liveCount,
+  onCloseDrawer,
+  onOpenDrawer,
+}: MobileNavProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const primaryItems = NAV_ITEMS.filter((item) => PRIMARY_MOBILE_ROUTES.has(item.to));
 
@@ -76,6 +82,7 @@ export function MobileNav({ drawerOpen, onCloseDrawer, onOpenDrawer }: MobileNav
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.to;
+                const showLivePill = item.to === '/live' && liveCount >= 1;
                 return (
                   <Link
                     key={item.to}
@@ -96,7 +103,7 @@ export function MobileNav({ drawerOpen, onCloseDrawer, onOpenDrawer }: MobileNav
                       />
                       <span>{item.label}</span>
                     </span>
-                    {item.badge && (
+                    {showLivePill && (
                       <span
                         className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
                         style={{
@@ -104,7 +111,7 @@ export function MobileNav({ drawerOpen, onCloseDrawer, onOpenDrawer }: MobileNav
                           color: 'var(--danger)',
                         }}
                       >
-                        {item.badge}
+                        LIVE {liveCount}
                       </span>
                     )}
                   </Link>

@@ -2,11 +2,14 @@ import { Hono } from 'hono';
 import {
   alertVoteSchema,
   AppError,
+  formatProviderSource,
+  normalizeHandle,
   type AlertConfidence,
   type AlertItem,
   type AlertType,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
+import { requireWriterRole } from '../auth.js';
 
 interface AlertRow {
   id: string;
@@ -60,12 +63,13 @@ export function createAlertsRouter() {
       .all<AlertRow>();
 
     const nowMs = Date.now();
+    const hasYtApiKey = Boolean(c.env.YOUTUBE_API_KEY);
     const alerts: AlertItem[] = (result.results ?? []).map((r) => {
       const createdMs = Date.parse(r.created_at);
       return {
         id: r.id,
         itemId: r.item_id,
-        accountHandle: r.account_handle,
+        accountHandle: normalizeHandle(r.account_handle),
         accountDisplayName: r.account_display_name,
         platform: r.platform,
         title: r.title,
@@ -78,7 +82,7 @@ export function createAlertsRouter() {
         userVote: r.user_vote === null ? null : r.user_vote === 1,
         remindedAt: r.reminded_at,
         createdAt: r.created_at,
-        source: 'd1',
+        source: formatProviderSource(r.platform, hasYtApiKey),
         ageSeconds: Number.isFinite(createdMs)
           ? Math.max(0, Math.floor((nowMs - createdMs) / 1000))
           : 0,
@@ -87,13 +91,14 @@ export function createAlertsRouter() {
 
     return c.json({
       alerts,
-      source: 'd1',
+      source: alerts[0]?.source ?? (hasYtApiKey ? 'YouTube API' : 'YouTube RSS'),
       asOf: new Date(nowMs).toISOString(),
     });
   });
 
   router.post('/:id/vote', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const alertId = c.req.param('id');
     const body = alertVoteSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {

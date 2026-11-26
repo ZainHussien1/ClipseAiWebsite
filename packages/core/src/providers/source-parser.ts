@@ -177,6 +177,14 @@ function parsePrefixedOrBare(trimmed: string): SourceParseResult {
   );
 }
 
+export function normalizeHandle(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('@')) {
+    return `@${trimmed.replace(/^@+/, '').toLowerCase()}`;
+  }
+  return trimmed;
+}
+
 /**
  * Strictly parses a user-supplied creator source into a fixed-platform identifier.
  * Never returns arbitrary fetchable URLs (SSRF-safe).
@@ -186,7 +194,9 @@ export function parseSourceInput(raw: string): SourceParseResult {
   if (!check.success) {
     return fail('EMPTY_INPUT', 'Source input must be 1..512 non-empty characters');
   }
-  const trimmed = check.data;
+  const trimmed = check.data.startsWith('@')
+    ? `@${check.data.replace(/^@+/, '')}`
+    : check.data;
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
     return parseUrlSource(trimmed);
   }

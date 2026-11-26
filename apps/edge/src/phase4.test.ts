@@ -80,6 +80,8 @@ describe('Phase 4 edge routes (alerts, votes, notifications, prefs, push, discor
       '0002_ingestion.sql',
       '0003_phase3.sql',
       '0004_phase4.sql',
+      '0005_phase5.sql',
+      '0006_v2_upgrade.sql',
     ]) {
       sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
     }

@@ -1,18 +1,26 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ExternalLink, RefreshCw, Rss, Scissors } from 'lucide-react';
-import { useState } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Copy, ExternalLink, RefreshCw, Rss, Scissors, Star } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { ClaimModal } from '../components/ui/ClaimModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ProviderStatusBar } from '../components/ui/ProviderStatusBar';
-import { fetchFeed, syncAllSources } from '../lib/api-v1';
+import {
+  deleteClaim,
+  fetchFeed,
+  listSources,
+  syncAllSources,
+  updateSource,
+} from '../lib/api-v1';
 import type { ItemKind, Platform } from '../lib/contracts';
 import {
   formatAgeSeconds,
   formatCount,
+  formatHumanDuration,
   formatLatencyMs,
+  formatProvenance,
+  normalizeHandle,
   safeExternalUrl,
-  safeThumbnailUrl,
 } from '../lib/url';
 
 export function FeedPage() {
@@ -39,11 +47,34 @@ export function FeedPage() {
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
+  const sourcesQuery = useQuery({ queryKey: ['sources'], queryFn: listSources });
+  const sourceByAccount = useMemo(
+    () => new Map((sourcesQuery.data ?? []).map((s) => [s.accountId, s])),
+    [sourcesQuery.data],
+  );
+
   const syncMutation = useMutation({
     mutationFn: syncAllSources,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['feed'] });
       void queryClient.invalidateQueries({ queryKey: ['sources'] });
+    },
+  });
+
+  const unclaimMutation = useMutation({
+    mutationFn: deleteClaim,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      void queryClient.invalidateQueries({ queryKey: ['claims'] });
+    },
+  });
+
+  const starMutation = useMutation({
+    mutationFn: ({ followId, starred }: { followId: string; starred: boolean }) =>
+      updateSource(followId, { starred }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['sources'] });
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
   });
 
@@ -64,7 +95,7 @@ export function FeedPage() {
         <div>
           <h1 className="text-[18px] font-semibold text-[var(--text-strong)]">Feed</h1>
           <p className="text-[12px] text-[var(--text-secondary)]">
-            Keyset-paginated creator uploads and streams with first-seen latency stamps.
+            Keyset-paginated creator uploads and streams with upstream provenance.
           </p>
         </div>
         <button
@@ -142,18 +173,11 @@ export function FeedPage() {
         <div className="space-y-2.5">
           {items.map((item) => {
             const externalUrl = safeExternalUrl(item.url);
-            const thumbUrl = safeThumbnailUrl(item.thumbnailUrl);
+            const follow = sourceByAccount.get(item.accountId);
+            const claim = item.claim;
             return (
               <Card key={item.id} className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  {thumbUrl && (
-                    <img
-                      src={thumbUrl}
-                      alt={item.title}
-                      loading="lazy"
-                      className="aspect-video w-32 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] object-cover sm:w-36"
-                    />
-                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-[11px]">
                       <span className="rounded border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-semibold uppercase text-[var(--text-secondary)]">
@@ -163,11 +187,14 @@ export function FeedPage() {
                         {item.kind}
                       </span>
                       <span className="font-medium text-[var(--text-primary)]">
-                        {item.accountDisplayName || item.accountHandle}
+                        {item.accountDisplayName || normalizeHandle(item.accountHandle)}
                       </span>
-                      {item.claimStatus && (
+                      <span className="font-mono text-[var(--text-muted)]">
+                        {normalizeHandle(item.accountHandle)}
+                      </span>
+                      {claim && (
                         <span className="rounded-full bg-[var(--accent-tint)] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
-                          {item.claimStatus}
+                          {claim.status} by {claim.claimedByMe ? 'you' : (claim.email ?? 'teammate')}
                         </span>
                       )}
                     </div>
@@ -178,14 +205,40 @@ export function FeedPage() {
 
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-secondary)]">
                       <span>Views: {formatCount(item.latestViews)}</span>
-                      <span>First seen latency: {formatLatencyMs(item.ingestLatencyMs)}</span>
+                      <span>Likes: {formatCount(item.latestLikes)}</span>
+                      <span>Duration: {formatHumanDuration(item.durationSec)}</span>
                       <span>
-                        Source: {item.source} · {formatAgeSeconds(item.ageSeconds)}
+                        {item.isBackfill
+                          ? 'Backfilled'
+                          : `First seen: ${formatLatencyMs(item.ingestLatencyMs)}`}
+                      </span>
+                      <span>
+                        {formatProvenance(item.source, item.platform)} ·{' '}
+                        {formatAgeSeconds(item.ageSeconds)}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    {follow && (
+                      <button
+                        type="button"
+                        aria-label={follow.starred ? 'Unstar creator' : 'Star creator'}
+                        onClick={() =>
+                          starMutation.mutate({
+                            followId: follow.followId,
+                            starred: !follow.starred,
+                          })
+                        }
+                        className={`flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border ${
+                          follow.starred
+                            ? 'border-[var(--accent)] bg-[var(--accent-tint)] text-[var(--accent)]'
+                            : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        <Star className="h-4 w-4" strokeWidth={1.5} />
+                      </button>
+                    )}
                     {externalUrl && (
                       <>
                         <a
@@ -211,14 +264,35 @@ export function FeedPage() {
                         </button>
                       </>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setClaimTarget({ id: item.id, title: item.title })}
-                      className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 text-[12px] font-semibold text-[#0c1519]"
-                    >
-                      <Scissors className="h-3.5 w-3.5" strokeWidth={1.8} />
-                      Claim
-                    </button>
+                    {claim ? (
+                      claim.claimedByMe ? (
+                        <button
+                          type="button"
+                          disabled={unclaimMutation.isPending}
+                          onClick={() => unclaimMutation.mutate(claim.id)}
+                          className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
+                        >
+                          Unclaim
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[12px] font-medium text-[var(--text-muted)] opacity-60"
+                        >
+                          Claimed
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setClaimTarget({ id: item.id, title: item.title })}
+                        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 text-[12px] font-semibold text-[#0c1519]"
+                      >
+                        <Scissors className="h-3.5 w-3.5" strokeWidth={1.8} />
+                        Claim
+                      </button>
+                    )}
                   </div>
                 </div>
               </Card>

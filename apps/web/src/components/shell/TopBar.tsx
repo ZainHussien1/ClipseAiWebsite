@@ -56,7 +56,8 @@ export function TopBar({
         <StatusPill
           status={status}
           fetchedAtMs={health?.fetchedAtMs}
-          source={health?.source ?? '/api/v1/health'}
+          lastIngestAt={health?.lastIngestAt}
+          providers={health?.providers}
         />
         <Link
           to="/notifications"
@@ -76,7 +77,7 @@ export function TopBar({
         <button
           type="button"
           onClick={onRefreshHealth}
-          aria-label="Refresh health status"
+          aria-label="Refresh system status"
           disabled={isFetchingHealth}
           className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)] disabled:opacity-50"
         >

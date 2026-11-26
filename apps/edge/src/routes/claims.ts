@@ -7,6 +7,7 @@ import {
   type ClaimStatus,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
+import { requireWriterRole } from '../auth.js';
 
 interface ClaimRow {
   id: string;
@@ -80,6 +81,7 @@ export function createClaimsRouter() {
 
   router.post('/', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const body = createClaimSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       throw AppError.badRequest('Invalid claim payload', body.error.flatten());
@@ -158,6 +160,7 @@ export function createClaimsRouter() {
 
   router.patch('/:claimId', async (c) => {
     const principal = c.get('principal');
+    requireWriterRole(principal);
     const claimId = c.req.param('claimId');
     const body = updateClaimSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
@@ -200,6 +203,43 @@ export function createClaimsRouter() {
     );
 
     return c.json({ claim: updated, eventId });
+  });
+
+  router.delete('/:claimId', async (c) => {
+    const principal = c.get('principal');
+    requireWriterRole(principal);
+    const claimId = c.req.param('claimId');
+
+    const existing = await c.env.DB.prepare(
+      'SELECT id, user_id FROM claims WHERE id = ? AND workspace_id = ?',
+    )
+      .bind(claimId, principal.workspaceId)
+      .first<{ id: string; user_id: string }>();
+
+    if (!existing) {
+      throw AppError.notFound('Claim not found');
+    }
+
+    if (
+      existing.user_id !== principal.userId &&
+      principal.role !== 'Owner' &&
+      principal.role !== 'Admin'
+    ) {
+      throw AppError.forbidden('You can only unclaim your own claims');
+    }
+
+    await c.env.DB.prepare('DELETE FROM claims WHERE id = ? AND workspace_id = ?')
+      .bind(claimId, principal.workspaceId)
+      .run();
+
+    const eventId = await notifyWorkspaceDo(
+      c.env,
+      principal.workspaceId,
+      'claim.deleted',
+      { id: claimId },
+    );
+
+    return c.json({ deleted: true, claimId, eventId });
   });
 
   return router;

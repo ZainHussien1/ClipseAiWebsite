@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, Trash2 } from 'lucide-react';
+import { Download, KeyRound, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from '../components/ui/Card';
+import { setAccountPassphrase } from '../lib/api';
 import {
   ApiError,
   deleteWorkspace,
@@ -18,11 +19,23 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [confirmDeleteText, setConfirmDeleteText] = useState('');
+  const [passphrase, setPassphrase] = useState('');
 
   const membersQuery = useQuery({
     queryKey: ['settings', 'members'],
     queryFn: listMembers,
     retry: false,
+  });
+
+  const passphraseMutation = useMutation({
+    mutationFn: () => setAccountPassphrase(passphrase),
+    onSuccess: () => {
+      setPassphrase('');
+      setStatusMsg('Account passphrase updated.');
+    },
+    onError: (err) => {
+      setStatusMsg(err instanceof Error ? err.message : 'Failed to update passphrase');
+    },
   });
 
   const roleMutation = useMutation({
@@ -82,7 +95,7 @@ export function SettingsPage() {
       <div>
         <h1 className="text-[18px] font-semibold text-[var(--text-strong)]">Settings</h1>
         <p className="text-[12px] text-[var(--text-secondary)]">
-          Workspace members, tenant-scoped data export, and atomic workspace deletion.
+          Account passphrase, workspace members, tenant-scoped export, and workspace deletion.
         </p>
       </div>
 
@@ -91,6 +104,43 @@ export function SettingsPage() {
           {statusMsg}
         </div>
       )}
+
+      <Card className="p-4">
+        <div className="flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-[var(--accent)]" strokeWidth={1.5} />
+          <h2 className="text-[14px] font-semibold text-[var(--text-strong)]">
+            Account Passphrase
+          </h2>
+        </div>
+        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+          Set a personal passphrase (min 8 characters) to sign in without requesting a Discord OTP.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (passphrase.length >= 8) passphraseMutation.mutate();
+          }}
+          className="mt-3 flex flex-wrap gap-2"
+        >
+          <input
+            type="password"
+            minLength={8}
+            maxLength={128}
+            value={passphrase}
+            onChange={(e) => setPassphrase(e.target.value)}
+            placeholder="New passphrase (min 8 chars)"
+            aria-label="New account passphrase"
+            className="min-h-[40px] min-w-[200px] flex-1 rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)]"
+          />
+          <button
+            type="submit"
+            disabled={passphrase.length < 8 || passphraseMutation.isPending}
+            className="min-h-[40px] rounded-lg bg-[var(--accent)] px-4 text-[12px] font-semibold text-[#0c1519] disabled:opacity-40"
+          >
+            {passphraseMutation.isPending ? 'Saving...' : 'Save Passphrase'}
+          </button>
+        </form>
+      </Card>
 
       <Card className="p-4">
         <h2 className="text-[14px] font-semibold text-[var(--text-strong)]">

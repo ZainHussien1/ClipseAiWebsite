@@ -56,6 +56,7 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
       '0003_phase3.sql',
       '0004_phase4.sql',
       '0005_phase5.sql',
+      '0006_v2_upgrade.sql',
     ]) {
       sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
     }
@@ -95,9 +96,28 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
       authenticated: false,
       email: null,
       hasWorkspace: false,
+      maxSeats: 3,
     });
 
-    // Bootstrap first workspace -> 201 + Set-Cookie
+    // Bare email without code or passphrase is rejected with 401
+    const bareRes = await app.request(
+      'https://radar.example.com/api/v1/auth/bootstrap',
+      {
+        method: 'POST',
+        headers: {
+          Origin: 'https://radar.example.com',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'owner@example.com',
+          workspaceName: 'Main Studio',
+        }),
+      },
+      env,
+    );
+    expect(bareRes.status).toBe(401);
+
+    // Bootstrap first workspace with passphrase -> 201 + Set-Cookie
     const bootRes = await app.request(
       'https://radar.example.com/api/v1/auth/bootstrap',
       {
@@ -109,6 +129,7 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
         body: JSON.stringify({
           email: 'owner@example.com',
           workspaceName: 'Main Studio',
+          passphrase: 'strong-owner-passphrase',
         }),
       },
       env,
@@ -130,7 +151,7 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
       role: 'Owner',
     });
 
-    // Unknown email rejected with 403 once workspace exists
+    // Unknown email rejected with 401 once workspace exists
     const outsiderRes = await app.request(
       'https://radar.example.com/api/v1/auth/bootstrap',
       {
@@ -139,13 +160,16 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
           Origin: 'https://radar.example.com',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: 'stranger@example.com' }),
+        body: JSON.stringify({
+          email: 'stranger@example.com',
+          passphrase: 'strong-owner-passphrase',
+        }),
       },
       env,
     );
-    expect(outsiderRes.status).toBe(403);
+    expect(outsiderRes.status).toBe(401);
 
-    // Existing owner can sign back in -> 200
+    // Existing owner can sign back in with passphrase -> 200
     const loginRes = await app.request(
       'https://radar.example.com/api/v1/auth/bootstrap',
       {
@@ -154,7 +178,10 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
           Origin: 'https://radar.example.com',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: 'owner@example.com' }),
+        body: JSON.stringify({
+          email: 'owner@example.com',
+          passphrase: 'strong-owner-passphrase',
+        }),
       },
       env,
     );
@@ -199,7 +226,10 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
           Origin: 'https://radar.example.com',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: 'owner@example.com' }),
+        body: JSON.stringify({
+        email: 'owner@example.com',
+        passphrase: 'strong-owner-passphrase',
+      }),
       },
       env,
     );
@@ -303,7 +333,10 @@ describe('Session auth bootstrap, providers status, health 200, and source sync'
           Origin: 'https://radar.example.com',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: 'owner@example.com' }),
+        body: JSON.stringify({
+        email: 'owner@example.com',
+        passphrase: 'strong-owner-passphrase',
+      }),
       },
       env,
     );

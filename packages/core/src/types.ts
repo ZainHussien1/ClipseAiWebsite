@@ -59,15 +59,30 @@ export function asAuditLogId(id: string): AuditLogId {
 export const roleSchema = z.enum(['Owner', 'Admin', 'Member', 'Viewer']);
 export type Role = z.infer<typeof roleSchema>;
 
-const ROLE_RANK: Record<Role, number> = {
+export const ROLE_RANK: Record<Role, number> = {
   Viewer: 1,
   Member: 2,
   Admin: 3,
   Owner: 4,
 };
 
+export const MAX_TEAM_SEATS = 3;
+
 export function hasRoleAtLeast(userRole: Role, requiredRole: Role): boolean {
   return ROLE_RANK[userRole] >= ROLE_RANK[requiredRole];
+}
+
+export function formatProviderSource(
+  platform: Platform,
+  hasApiKey = false,
+): string {
+  if (platform === 'youtube') {
+    return hasApiKey ? 'YouTube API' : 'YouTube RSS';
+  }
+  if (platform === 'twitch') {
+    return 'Twitch Helix';
+  }
+  return 'Kick API';
 }
 
 export const platformSchema = z.enum(['youtube', 'twitch', 'kick']);

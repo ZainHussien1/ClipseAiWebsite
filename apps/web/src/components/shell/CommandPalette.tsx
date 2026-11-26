@@ -27,7 +27,7 @@ export function CommandPalette({ open, onClose, onRefreshHealth }: CommandPalett
     const routeEntries: PaletteEntry[] = NAV_ITEMS.map((item) => ({
       id: `route:${item.to}`,
       label: item.label,
-      subtitle: `${item.section} · ${item.phaseLabel}`,
+      subtitle: item.section,
       run: () => {
         void navigate({ to: item.to });
         onClose();
@@ -38,8 +38,8 @@ export function CommandPalette({ open, onClose, onRefreshHealth }: CommandPalett
       ...routeEntries,
       {
         id: 'action:refresh-health',
-        label: 'Refresh system health',
-        subtitle: 'Query /api/v1/health now',
+        label: 'Refresh system status',
+        subtitle: 'Check Edge & providers now',
         run: () => {
           onRefreshHealth();
           onClose();

@@ -1,20 +1,23 @@
-import { Hono } from 'hono';
-import { AppError } from '@clipse/core';
-import { z } from 'zod';
+import { Hono, type Handler } from 'hono';
+import {
+  AppError,
+  loginSchema,
+  MAX_TEAM_SEATS,
+  requestCodeSchema,
+  setPassphraseSchema,
+} from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
 import { CloudflareAccessAuthProvider } from '../auth.js';
 import {
   getSessionCookieName,
+  hashOtpCode,
+  hashPassphrase,
   parseCookie,
   resolveSessionSecret,
   SessionAuthProvider,
   signSessionToken,
+  verifyPassphrase,
 } from '../session.js';
-
-const bootstrapSchema = z.object({
-  email: z.string().trim().email().max(254),
-  workspaceName: z.string().trim().min(1).max(80).optional(),
-});
 
 function buildSetCookieHeader(
   requestUrl: string,
@@ -40,6 +43,91 @@ function buildSetCookieHeader(
     parts.push('Secure');
   }
   return parts.join('; ');
+}
+
+function generateSixDigitOtp(): string {
+  const bytes = crypto.getRandomValues(new Uint32Array(1));
+  const num = (bytes[0] ?? 0) % 1_000_000;
+  return String(num).padStart(6, '0');
+}
+
+function constantTimeHexEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+async function sendOtpToDiscord(
+  webhookUrl: string | undefined,
+  email: string,
+  code: string,
+): Promise<void> {
+  if (!webhookUrl) return;
+  try {
+    const [localPart, domain] = email.split('@');
+    const maskedLocal =
+      localPart && localPart.length > 2
+        ? `${localPart.slice(0, 2)}***`
+        : '***';
+    const maskedEmail = `${maskedLocal}@${domain ?? 'user'}`;
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `Clipse Radar sign-in code for ${maskedEmail}: **${code}** (expires in 10 min)`,
+        allowed_mentions: { parse: [] },
+      }),
+    });
+  } catch {
+    // Best-effort delivery; never fail/enumerate on webhook error
+  }
+}
+
+async function consumeValidOtp(
+  db: D1Database,
+  email: string,
+  code: string,
+  nowIso: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT id, code_hash, attempts, expires_at
+       FROM auth_otps
+       WHERE email = ? AND consumed_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    )
+    .bind(email)
+    .first<{
+      id: string;
+      code_hash: string;
+      attempts: number;
+      expires_at: string;
+    }>();
+
+  if (!row) return false;
+  if (row.attempts >= 5 || row.expires_at <= nowIso) {
+    return false;
+  }
+
+  await db
+    .prepare('UPDATE auth_otps SET attempts = attempts + 1 WHERE id = ?')
+    .bind(row.id)
+    .run();
+
+  const candidateHash = await hashOtpCode(code);
+  if (!constantTimeHexEqual(candidateHash, row.code_hash)) {
+    return false;
+  }
+
+  await db
+    .prepare('UPDATE auth_otps SET consumed_at = ? WHERE id = ?')
+    .bind(nowIso, row.id)
+    .run();
+  return true;
 }
 
 export function createAuthRouter() {
@@ -100,17 +188,65 @@ export function createAuthRouter() {
       authenticated,
       email,
       hasWorkspace,
+      maxSeats: MAX_TEAM_SEATS,
     });
   });
 
-  router.post('/bootstrap', async (c) => {
-    const body = bootstrapSchema.safeParse(await c.req.json().catch(() => null));
+  router.post('/request-code', async (c) => {
+    const body = requestCodeSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
-      throw AppError.badRequest('Invalid email or workspace name', body.error.flatten());
+      throw AppError.badRequest('Invalid email address', body.error.flatten());
+    }
+
+    const email = body.data.email.toLowerCase();
+    const wsCountRow = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS cnt FROM workspaces',
+    ).first<{ cnt: number }>();
+    const hasWorkspace = (wsCountRow?.cnt ?? 0) > 0;
+
+    let isAllowlisted = !hasWorkspace;
+    if (hasWorkspace) {
+      const member = await c.env.DB.prepare(
+        'SELECT user_id FROM memberships WHERE LOWER(email) = ? LIMIT 1',
+      )
+        .bind(email)
+        .first<{ user_id: string }>();
+      isAllowlisted = Boolean(member);
+    }
+
+    if (isAllowlisted) {
+      const code = generateSixDigitOtp();
+      const codeHash = await hashOtpCode(code);
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 10 * 60_000).toISOString();
+      await c.env.DB.prepare(
+        `INSERT INTO auth_otps (id, email, code_hash, attempts, expires_at, created_at)
+         VALUES (?, ?, ?, 0, ?, ?)`,
+      )
+        .bind(crypto.randomUUID(), email, codeHash, expiresAt, now.toISOString())
+        .run();
+
+      await sendOtpToDiscord(c.env.DISCORD_WEBHOOK_URL, email, code);
+    }
+
+    return c.json({
+      ok: true,
+      message: 'If your email is allowlisted, a verification code has been sent.',
+    });
+  });
+
+  const handleLoginOrBootstrap: Handler<{
+    Bindings: EdgeBindings;
+    Variables: EdgeVariables;
+  }> = async (c) => {
+    const body = loginSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      throw AppError.unauthorized('Verification code or passphrase is required');
     }
 
     const email = body.data.email.toLowerCase();
     const secret = resolveSessionSecret(c.env.SESSION_SECRET, c.env.ENVIRONMENT);
+    const nowIso = new Date().toISOString();
 
     const wsCountRow = await c.env.DB.prepare(
       'SELECT COUNT(*) AS cnt FROM workspaces',
@@ -118,23 +254,32 @@ export function createAuthRouter() {
     const existingWorkspaces = wsCountRow?.cnt ?? 0;
 
     if (existingWorkspaces === 0) {
+      let passphraseHash: string | null = null;
+      if (body.data.code) {
+        const otpOk = await consumeValidOtp(c.env.DB, email, body.data.code, nowIso);
+        if (!otpOk) {
+          throw AppError.unauthorized('Invalid or expired verification code');
+        }
+      } else if (body.data.passphrase) {
+        passphraseHash = await hashPassphrase(body.data.passphrase);
+      }
+
       const workspaceId = `ws-${crypto.randomUUID().slice(0, 8)}`;
       const userId = `usr-${crypto.randomUUID().slice(0, 8)}`;
       const membershipId = `mem-${crypto.randomUUID().slice(0, 8)}`;
       const wsName = body.data.workspaceName ?? 'Clipse Workspace';
       const slug = `${wsName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace'}-${workspaceId.slice(-4)}`;
-      const now = new Date().toISOString();
 
       await c.env.DB.prepare(
         'INSERT INTO workspaces (id, slug, name, timezone, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
       )
-        .bind(workspaceId, slug, wsName, 'UTC', now, now)
+        .bind(workspaceId, slug, wsName, 'UTC', nowIso, nowIso)
         .run();
 
       await c.env.DB.prepare(
-        'INSERT INTO memberships (id, workspace_id, user_id, email, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO memberships (id, workspace_id, user_id, email, role, passphrase_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
-        .bind(membershipId, workspaceId, userId, email, 'Owner', now, now)
+        .bind(membershipId, workspaceId, userId, email, 'Owner', passphraseHash, nowIso, nowIso)
         .run();
 
       const token = await signSessionToken({ sub: userId, email }, secret);
@@ -152,15 +297,29 @@ export function createAuthRouter() {
     }
 
     const existingMember = await c.env.DB.prepare(
-      'SELECT user_id, workspace_id, role FROM memberships WHERE LOWER(email) = ? LIMIT 1',
+      'SELECT user_id, workspace_id, role, passphrase_hash FROM memberships WHERE LOWER(email) = ? LIMIT 1',
     )
       .bind(email)
-      .first<{ user_id: string; workspace_id: string; role: string }>();
+      .first<{
+        user_id: string;
+        workspace_id: string;
+        role: string;
+        passphrase_hash: string | null;
+      }>();
 
     if (!existingMember) {
-      throw AppError.forbidden(
-        'Workspace already initialized; ask an Owner/Admin to invite your email in Settings -> Members',
-      );
+      throw AppError.unauthorized('Invalid email or verification credentials');
+    }
+
+    let verified = false;
+    if (body.data.code) {
+      verified = await consumeValidOtp(c.env.DB, email, body.data.code, nowIso);
+    } else if (body.data.passphrase && existingMember.passphrase_hash) {
+      verified = await verifyPassphrase(body.data.passphrase, existingMember.passphrase_hash);
+    }
+
+    if (!verified) {
+      throw AppError.unauthorized('Invalid email or verification credentials');
     }
 
     const token = await signSessionToken(
@@ -175,6 +334,27 @@ export function createAuthRouter() {
       workspaceId: existingMember.workspace_id,
       role: existingMember.role,
     });
+  };
+
+  router.post('/login', handleLoginOrBootstrap);
+  router.post('/bootstrap', handleLoginOrBootstrap);
+
+  router.post('/passphrase', async (c) => {
+    const principal = c.get('principal');
+    const body = setPassphraseSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      throw AppError.badRequest('Passphrase must be 8..128 characters', body.error.flatten());
+    }
+
+    const hash = await hashPassphrase(body.data.passphrase);
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      'UPDATE memberships SET passphrase_hash = ?, updated_at = ? WHERE workspace_id = ? AND user_id = ?',
+    )
+      .bind(hash, now, principal.workspaceId, principal.userId)
+      .run();
+
+    return c.json({ ok: true });
   });
 
   router.post('/logout', (c) => {

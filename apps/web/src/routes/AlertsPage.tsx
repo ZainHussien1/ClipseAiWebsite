@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { listAlerts } from '../lib/api-v1';
 import type { AlertConfidence } from '../lib/contracts';
-import { formatAgeSeconds, safeExternalUrl } from '../lib/url';
+import { formatAgeSeconds, formatProvenance, normalizeHandle, safeExternalUrl } from '../lib/url';
 
 const CONFIDENCE_STYLE: Record<AlertConfidence, { bg: string; color: string }> = {
   high: { bg: 'var(--success-bg)', color: 'var(--success)' },
@@ -63,7 +63,7 @@ export function AlertsPage() {
                         {alert.type.replace('_', ' ')}
                       </span>
                       <span className="font-medium text-[var(--text-primary)]">
-                        {alert.accountDisplayName || alert.accountHandle}
+                        {alert.accountDisplayName || normalizeHandle(alert.accountHandle)}
                       </span>
                       {alert.remindedAt && (
                         <span className="rounded-full bg-[var(--accent-tint)] px-2 py-0.5 text-[10px] text-[var(--accent)]">
@@ -76,7 +76,8 @@ export function AlertsPage() {
                     </h2>
                     <p className="mt-1 text-[12px] text-[var(--text-primary)]">{alert.reason}</p>
                     <div className="mt-2 text-[11px] text-[var(--text-muted)]">
-                      {alert.source} · {formatAgeSeconds(alert.ageSeconds)}
+                      {formatProvenance(alert.source, alert.platform)} ·{' '}
+                      {formatAgeSeconds(alert.ageSeconds)}
                     </div>
                   </div>
 

@@ -7,6 +7,7 @@ import {
   AppError,
   asUserId,
   asWorkspaceId,
+  hasRoleAtLeast,
   roleSchema,
   type AuthProvider,
   type Principal,
@@ -80,6 +81,12 @@ export class CloudflareAccessAuthProvider implements AuthProvider {
       }
       throw AppError.unauthorized('Invalid or expired Access JWT');
     }
+  }
+}
+
+export function requireWriterRole(principal: Principal): void {
+  if (!hasRoleAtLeast(principal.role, 'Member')) {
+    throw AppError.forbidden('Viewer role cannot perform write operations');
   }
 }
 

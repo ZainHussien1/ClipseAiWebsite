@@ -11,6 +11,14 @@ export type NotificationTier = 'P1' | 'P2' | 'P3';
 export type NotificationChannel = 'discord' | 'webpush' | 'in_app';
 export type WorkspaceRole = 'Owner' | 'Admin' | 'Member' | 'Viewer';
 
+export interface ItemClaimInfo {
+  id: string;
+  status: ClaimStatus;
+  userId: string;
+  email: string | null;
+  claimedByMe: boolean;
+}
+
 export interface SourceRule {
   minRisingLevel: ActiveRisingTier;
   notifyLive: boolean;
@@ -50,11 +58,15 @@ export interface FeedItem {
   thumbnailUrl: string | null;
   publishedAt: string;
   firstSeenAt: string;
+  isBackfill: boolean;
+  durationSec: number | null;
   ingestLatencyMs: number | null;
   latestViews: number | null;
   latestLikes: number | null;
   latestComments: number | null;
+  snapshotCount: number;
   claimStatus: ClaimStatus | null;
+  claim: ItemClaimInfo | null;
   source: string;
   ageSeconds: number;
 }
@@ -85,6 +97,7 @@ export interface LiveStream {
 
 export interface LiveResponse {
   streams: LiveStream[];
+  liveCount: number;
   source: string;
   asOf: string;
 }
@@ -101,11 +114,15 @@ export interface RisingItem {
   url: string;
   thumbnailUrl: string | null;
   publishedAt: string;
+  isBackfill: boolean;
   tier: ActiveRisingTier;
   score: number;
   velocityRatio: number;
-  engagementRatio: number;
+  engagementRatio: number | null;
   reason: string;
+  snapshotCount: number;
+  snapshots?: number[];
+  claim: ItemClaimInfo | null;
   source: string;
   ageSeconds: number;
 }

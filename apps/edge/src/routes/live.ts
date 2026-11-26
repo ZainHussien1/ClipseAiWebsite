@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
-import type { LiveStream } from '@clipse/core';
+import {
+  formatProviderSource,
+  normalizeHandle,
+  type LiveStream,
+} from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
 
 interface LiveRow {
@@ -44,12 +48,13 @@ export function createLiveRouter() {
       .all<LiveRow>();
 
     const nowMs = Date.now();
+    const hasYtApiKey = Boolean(c.env.YOUTUBE_API_KEY);
     const streams: LiveStream[] = (result.results ?? []).map((r) => {
       const sampledMs = Date.parse(r.sampled_at);
       return {
         itemId: r.item_id,
         accountId: r.account_id,
-        accountHandle: r.account_handle,
+        accountHandle: normalizeHandle(r.account_handle),
         accountDisplayName: r.account_display_name,
         platform: r.platform,
         externalId: r.external_id,
@@ -59,16 +64,20 @@ export function createLiveRouter() {
         viewers: r.viewers,
         startedAt: r.started_at,
         sampledAt: r.sampled_at,
-        source: 'd1',
+        source: formatProviderSource(r.platform, hasYtApiKey),
         ageSeconds: Number.isFinite(sampledMs)
           ? Math.max(0, Math.floor((nowMs - sampledMs) / 1000))
           : 0,
       };
     });
 
+    const responseSource =
+      streams[0]?.source ?? (hasYtApiKey ? 'YouTube API' : 'YouTube RSS');
+
     return c.json({
       streams,
-      source: 'd1',
+      liveCount: streams.length,
+      source: responseSource,
       asOf: new Date(nowMs).toISOString(),
     });
   });
