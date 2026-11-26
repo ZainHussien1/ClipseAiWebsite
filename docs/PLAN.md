@@ -63,13 +63,13 @@ flowchart LR
 | ID | Task | Agent | Depends On | Dirs/Files | Exit Criteria | Risk | Status |
 |---|---|---|---|---|---|---|---|
 | P0.1 | Verify §3/§4.2, ADRs, AGENTS, PLAN | architect | — | `AGENTS.md`, `docs/PLAN.md`, `docs/adr/*` | Reviewer pass + G0 approval | Low | done |
-| P1.1 | Monorepo, CI, wrangler, staging | platform | P0.1 | `package.json`, `.github/*`, `wrangler.*` | Green CI, staging live ($0 Free) | Med | pending |
-| P1.2 | `SECURITY.md`, Access JWT, headers, D1 | backend | P1.1 | `docs/SECURITY.md`, `packages/core`, `apps/edge` | Header scan clean, JWT/IDOR tests | High | pending |
-| P1.3 | `stageshow` tokens, shell, health UI | frontend | P1.1 | `apps/web` | 4-viewport QA, budgets pass | Med | pending |
-| P2.1 | Provider ports, YT/Twitch/Kick adapters | ingestion | P1.2 | `packages/core`, `apps/engine` | Contract tests on recorded fixtures | High | pending |
-| P2.2 | Webhooks, 2 queues, reconcilers, governor | ingestion | P2.1 | `apps/edge/hooks`, `apps/engine` | Forgery/replay/out-of-order tests | High | pending |
-| P3.1 | Sources, Feed, Live, Rising, Claims API | backend | P2.2 | `apps/edge`, `packages/core` | Atomic claim overlap + IDOR tests | Med | pending |
-| P3.2 | Core UI (Sources, Feed, Live, Claims) | frontend | P1.3, P3.1 | `apps/web` | Playwright 3-engine + mobile E2E | Med | pending |
+| P1.1 | Monorepo, CI, wrangler, staging | platform | P0.1 | `package.json`, `.github/*`, `wrangler.*` | Green CI, staging live ($0 Free) | Med | done |
+| P1.2 | `SECURITY.md`, Access JWT, headers, D1 | backend | P1.1 | `docs/SECURITY.md`, `packages/core`, `apps/edge` | Header scan clean, JWT/IDOR tests | High | done |
+| P1.3 | `stageshow` tokens, shell, health UI | frontend | P1.1 | `apps/web` | 4-viewport QA, budgets pass | Med | done |
+| P2.1 | Provider ports, YT/Twitch/Kick adapters | ingestion | P1.2 | `packages/core`, `apps/engine` | Contract tests on recorded fixtures | High | done |
+| P2.2 | Webhooks, 2 queues, reconcilers, governor | ingestion | P2.1 | `apps/edge/hooks`, `apps/engine` | Forgery/replay/out-of-order tests | High | done |
+| P3.1 | Sources, Feed, Live, Rising, Claims API | backend | P2.2 | `apps/edge`, `packages/core` | Atomic claim overlap + IDOR tests | Med | in_progress |
+| P3.2 | Core UI (Sources, Feed, Live, Claims) | frontend | P1.3, P3.1 | `apps/web` | Playwright 3-engine + mobile E2E | Med | in_progress |
 | P4.1 | Live Moments, VOD-ready, rules, push/Discord | signals | P3.1 | `packages/core`, `apps/engine` | Replay harness + escalation tests | Med | pending |
 | P4.2 | Notification center, PWA push, votes UI | frontend | P4.1 | `apps/web` | Push/offline/vote E2E pass | Med | pending |
 | P5.1 | Clip Log, Our channels, ROI, Scorecard, Report | backend | P4.1 | `packages/core`, `apps/edge`, `apps/engine` | Truth audit + export tests | Med | pending |

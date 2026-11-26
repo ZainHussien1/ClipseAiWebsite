@@ -4,15 +4,22 @@ import {
   parseEnv,
   type AuthProvider,
   type HealthStatus,
+  type IngestQueueMessage,
   type Principal,
 } from '@clipse/core';
 import { CloudflareAccessAuthProvider, resolvePrincipal } from './auth.js';
+import {
+  createKickHooksRouter,
+  createTwitchHooksRouter,
+  createYouTubeHooksRouter,
+} from './hooks/index.js';
 import { csrfMiddleware, securityHeadersMiddleware } from './security.js';
 import type { WorkspaceDO } from './do/workspace.js';
 
 export interface EdgeBindings {
   DB: D1Database;
   WORKSPACE_DO: DurableObjectNamespace<WorkspaceDO>;
+  INGEST_QUEUE?: Queue<IngestQueueMessage>;
   ASSETS?: Fetcher;
   ENVIRONMENT?: string;
   AI_INSIGHTS_ENABLED?: string;
@@ -20,6 +27,9 @@ export interface EdgeBindings {
   ACCESS_AUD?: string;
   DISCORD_WEBHOOK_URL?: string;
   GEMINI_API_KEY?: string;
+  YOUTUBE_WEBSUB_SECRET?: string;
+  TWITCH_EVENTSUB_SECRET?: string;
+  KICK_PUBLIC_KEY?: string;
 }
 
 export interface EdgeVariables {
@@ -35,6 +45,11 @@ export function createApp(deps: AppDependencies = {}) {
 
   app.use('*', securityHeadersMiddleware);
   app.use('/api/*', csrfMiddleware);
+
+  // Public provider webhook endpoints (outside Access JWT & CSRF; signature + dedupe protected)
+  app.route('/hooks/youtube', createYouTubeHooksRouter());
+  app.route('/hooks/twitch', createTwitchHooksRouter());
+  app.route('/hooks/kick', createKickHooksRouter());
 
   app.onError((err, c) => {
     if (err instanceof AppError) {
