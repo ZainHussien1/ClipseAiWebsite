@@ -1,7 +1,7 @@
 import { Hono, type MiddlewareHandler } from 'hono';
 import {
   AppError,
-  parseEnv,
+  envSchema,
   type AuthProvider,
   type HealthStatus,
   type IngestQueueMessage,
@@ -87,7 +87,7 @@ export function createApp(deps: AppDependencies = {}) {
   });
 
   app.get('/api/v1/health', async (c) => {
-    const env = parseEnv({
+    const parsedEnv = envSchema.safeParse({
       ENVIRONMENT: c.env.ENVIRONMENT,
       AI_INSIGHTS_ENABLED: c.env.AI_INSIGHTS_ENABLED,
       ACCESS_TEAM_DOMAIN: c.env.ACCESS_TEAM_DOMAIN,
@@ -103,9 +103,15 @@ export function createApp(deps: AppDependencies = {}) {
       status = 'degraded';
     }
 
+    const authConfigured = Boolean(c.env.ACCESS_TEAM_DOMAIN && c.env.ACCESS_AUD);
+    if (!parsedEnv.success || !authConfigured) {
+      status = 'degraded';
+    }
+
     return c.json({
       status,
-      environment: env.ENVIRONMENT,
+      environment: c.env.ENVIRONMENT ?? 'local',
+      authConfigured,
       source: 'edge',
       checkedAt: new Date().toISOString(),
     });

@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "clipse-radar-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "0b4693d5-eec1-4ab6-a6c6-5a9911de24a8",
       "migrations_dir": "migrations"
     }
   ],
@@ -51,7 +51,7 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "local",
+    "ENVIRONMENT": "staging",
     "AI_INSIGHTS_ENABLED": "false"
   }
 }
