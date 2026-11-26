@@ -22,13 +22,47 @@ const kickWebhookSchema = z.object({
   started_at: z.string().nullable().optional(),
 });
 
+const KICK_PUBLIC_KEY_URL = 'https://api.kick.com/public/v1/public-key';
+const KEY_CACHE_TTL_MS = 60 * 60 * 1000;
+let cachedKickKey: { pem: string; expiresAtMs: number } | null = null;
+
+async function resolveKickPublicKey(
+  configuredKey: string | undefined,
+  nowMs: number,
+): Promise<string | null> {
+  if (configuredKey && configuredKey.trim().length > 0) {
+    return configuredKey;
+  }
+  if (cachedKickKey && cachedKickKey.expiresAtMs > nowMs) {
+    return cachedKickKey.pem;
+  }
+  try {
+    const res = await fetch(KICK_PUBLIC_KEY_URL, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => null)) as {
+      data?: { public_key?: unknown };
+    } | null;
+    const pem =
+      typeof json?.data?.public_key === 'string' ? json.data.public_key : null;
+    if (!pem) return null;
+    cachedKickKey = { pem, expiresAtMs: nowMs + KEY_CACHE_TTL_MS };
+    return pem;
+  } catch {
+    return null;
+  }
+}
+
 export function createKickHooksRouter() {
   const router = new Hono<{ Bindings: EdgeBindings; Variables: EdgeVariables }>();
 
   router.post('/', async (c) => {
-    const publicKey = c.env.KICK_PUBLIC_KEY;
+    const nowMs = Date.now();
+    const publicKey = await resolveKickPublicKey(c.env.KICK_PUBLIC_KEY, nowMs);
     if (!publicKey) {
-      return c.text('Kick public key not configured', 503);
+      return c.text('Kick public key unavailable', 503);
     }
 
     const messageId = c.req.header('Kick-Event-Message-Id') ?? '';
@@ -38,8 +72,6 @@ export function createKickHooksRouter() {
     if (!messageId || !timestamp || !signature) {
       return c.text('Missing Kick webhook headers', 400);
     }
-
-    const nowMs = Date.now();
     if (!isTimestampWithinWindow(timestamp, nowMs)) {
       return c.text('Stale Kick webhook timestamp', 403);
     }

@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Radio, Scissors } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { ArrowRight, ExternalLink, Radio, Scissors } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { ClaimModal } from '../components/ui/ClaimModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ProviderStatusBar } from '../components/ui/ProviderStatusBar';
-import { fetchLive } from '../lib/api-v1';
+import { fetchLive, fetchProviderStatus } from '../lib/api-v1';
 import {
   formatAgeSeconds,
   formatCount,
@@ -72,7 +73,16 @@ export function LivePage() {
     refetchInterval: wsConnected ? false : 15_000,
   });
 
+  const providerQuery = useQuery({
+    queryKey: ['providers', 'status'],
+    queryFn: fetchProviderStatus,
+    staleTime: 60_000,
+  });
+
   const streams = liveQuery.data?.streams ?? [];
+  const needsLiveCredentials =
+    providerQuery.data?.twitch.status === 'credentials_missing' ||
+    providerQuery.data?.kick.status === 'credentials_missing';
 
   return (
     <div className="space-y-4">
@@ -99,6 +109,27 @@ export function LivePage() {
       </div>
 
       <ProviderStatusBar />
+
+      {needsLiveCredentials && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <h2 className="text-[13px] font-semibold text-[var(--text-strong)]">
+              Connect Twitch / Kick for live stream webhooks &amp; polling
+            </h2>
+            <p className="mt-0.5 text-[12px] text-[var(--text-secondary)]">
+              Twitch or Kick credentials are not configured yet. Add Worker secrets and verify in
+              Settings &rarr; Integrations.
+            </p>
+          </div>
+          <Link
+            to="/settings"
+            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[var(--accent-tint)] px-3 text-[12px] font-medium text-[var(--text-strong)]"
+          >
+            Open Integrations
+            <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </Link>
+        </Card>
+      )}
 
       {liveQuery.isLoading ? (
         <Card className="p-6 text-[12px] text-[var(--text-secondary)]">Checking live streams...</Card>

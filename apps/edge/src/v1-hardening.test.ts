@@ -355,7 +355,9 @@ describe('V1 hardening: OTP/PBKDF2 auth, Viewer 403, and F-01..F-13 truthfulness
     const healthRes = await app.request('https://radar.example.com/api/v1/health', {}, env);
     expect(await healthRes.json()).toMatchObject({
       status: 'ok',
-      providers: { youtube: 'YouTube RSS' },
+      providers: {
+        youtube: { status: 'public_feed_active', label: 'YouTube RSS' },
+      },
       lastIngestAt: '2026-11-26T10:00:05Z',
     });
 

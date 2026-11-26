@@ -11,6 +11,65 @@ import { TokenBucketQuotaGovernor } from './quota.js';
 import type { FetchLike } from './youtube.js';
 
 const TWITCH_HELIX_ORIGIN = 'https://api.twitch.tv/helix';
+const TWITCH_OAUTH_URL = 'https://id.twitch.tv/oauth2/token';
+
+const twitchTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().int().positive(),
+  token_type: z.string().min(1),
+});
+
+interface CachedAppToken {
+  readonly accessToken: string;
+  readonly expiresAtMs: number;
+}
+
+const twitchTokenCache = new Map<string, CachedAppToken>();
+
+export function clearTwitchTokenCache(): void {
+  twitchTokenCache.clear();
+}
+
+export async function exchangeTwitchAppToken(
+  clientId: string,
+  clientSecret: string,
+  fetchFn: FetchLike = globalThis.fetch.bind(globalThis),
+  nowMs = Date.now(),
+): Promise<{ accessToken: string; expiresAtMs: number }> {
+  const cached = twitchTokenCache.get(clientId);
+  if (cached && cached.expiresAtMs > nowMs + 60_000) {
+    return cached;
+  }
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: 'client_credentials',
+  });
+
+  const res = await fetchFn(TWITCH_OAUTH_URL, {
+    method: 'POST',
+    redirect: 'error',
+    signal: AbortSignal.timeout(5000),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+
+  if (res.status === 429) {
+    throw AppError.rateLimited('Twitch OAuth token endpoint rate limited (429)');
+  }
+  if (!res.ok) {
+    throw AppError.unauthorized(`Twitch OAuth token exchange failed (${res.status})`);
+  }
+
+  const parsed = twitchTokenResponseSchema.parse(await res.json());
+  const entry: CachedAppToken = {
+    accessToken: parsed.access_token,
+    expiresAtMs: nowMs + parsed.expires_in * 1000,
+  };
+  twitchTokenCache.set(clientId, entry);
+  return entry;
+}
 
 const twitchUsersResponseSchema = z.object({
   data: z

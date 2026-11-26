@@ -11,6 +11,105 @@ import { TokenBucketQuotaGovernor } from './quota.js';
 import type { FetchLike } from './youtube.js';
 
 const KICK_API_ORIGIN = 'https://api.kick.com/public/v1';
+const KICK_OAUTH_URL = 'https://id.kick.com/oauth/token';
+
+const kickTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().int().positive(),
+  token_type: z.string().min(1),
+});
+
+const kickPublicKeyResponseSchema = z.object({
+  data: z.object({
+    public_key: z.string().min(1),
+  }),
+});
+
+interface CachedToken {
+  readonly accessToken: string;
+  readonly expiresAtMs: number;
+}
+
+interface CachedPublicKey {
+  readonly publicKey: string;
+  readonly expiresAtMs: number;
+}
+
+const kickTokenCache = new Map<string, CachedToken>();
+let cachedKickPublicKey: CachedPublicKey | null = null;
+
+export function clearKickCaches(): void {
+  kickTokenCache.clear();
+  cachedKickPublicKey = null;
+}
+
+export async function exchangeKickAppToken(
+  clientId: string,
+  clientSecret: string,
+  fetchFn: FetchLike = globalThis.fetch.bind(globalThis),
+  nowMs = Date.now(),
+): Promise<{ accessToken: string; expiresAtMs: number }> {
+  const cached = kickTokenCache.get(clientId);
+  if (cached && cached.expiresAtMs > nowMs + 60_000) {
+    return cached;
+  }
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: 'client_credentials',
+  });
+
+  const res = await fetchFn(KICK_OAUTH_URL, {
+    method: 'POST',
+    redirect: 'error',
+    signal: AbortSignal.timeout(5000),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+
+  if (res.status === 429) {
+    throw AppError.rateLimited('Kick OAuth token endpoint rate limited (429)');
+  }
+  if (!res.ok) {
+    throw AppError.unauthorized(`Kick OAuth token exchange failed (${res.status})`);
+  }
+
+  const parsed = kickTokenResponseSchema.parse(await res.json());
+  const entry: CachedToken = {
+    accessToken: parsed.access_token,
+    expiresAtMs: nowMs + parsed.expires_in * 1000,
+  };
+  kickTokenCache.set(clientId, entry);
+  return entry;
+}
+
+export async function fetchKickPublicKey(
+  fetchFn: FetchLike = globalThis.fetch.bind(globalThis),
+  nowMs = Date.now(),
+): Promise<string> {
+  if (cachedKickPublicKey && cachedKickPublicKey.expiresAtMs > nowMs) {
+    return cachedKickPublicKey.publicKey;
+  }
+
+  const res = await fetchFn(`${KICK_API_ORIGIN}/public-key`, {
+    method: 'GET',
+    redirect: 'error',
+    signal: AbortSignal.timeout(5000),
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    throw AppError.internal(`Kick public-key endpoint error (${res.status})`);
+  }
+
+  const parsed = kickPublicKeyResponseSchema.parse(await res.json());
+  cachedKickPublicKey = {
+    publicKey: parsed.data.public_key,
+    expiresAtMs: nowMs + 60 * 60_000,
+  };
+  return parsed.data.public_key;
+}
 
 const kickChannelsResponseSchema = z.object({
   data: z

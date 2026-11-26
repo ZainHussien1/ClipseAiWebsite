@@ -6,6 +6,7 @@ import {
   type AuthProvider,
   type HealthStatus,
   type IngestQueueMessage,
+  type IntegrationStatus,
   type Platform,
   type Principal,
 } from '@clipse/core';
@@ -20,6 +21,10 @@ import { createAuthRouter } from './routes/auth.js';
 import { createClaimsRouter } from './routes/claims.js';
 import { createClipsRouter } from './routes/clips.js';
 import { createFeedRouter } from './routes/feed.js';
+import {
+  createAdminIntegrationsRouter,
+  createIntegrationsCallbackRouter,
+} from './routes/integrations.js';
 import { createLiveRouter } from './routes/live.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createProvidersRouter } from './routes/providers.js';
@@ -45,11 +50,18 @@ export interface EngineSyncResult {
   readonly message?: string;
 }
 
+export interface EngineVerifyResult {
+  readonly ok: boolean;
+  readonly status: IntegrationStatus;
+  readonly message: string;
+}
+
 export interface EngineServiceBinding {
   syncAccount?: (input: {
     platform: Platform;
     externalId: string;
   }) => Promise<EngineSyncResult>;
+  verifyProviderConnection?: (platform: Platform) => Promise<EngineVerifyResult>;
 }
 
 export interface EdgeBindings {
@@ -129,6 +141,9 @@ export function createApp(deps: AppDependencies = {}) {
   app.use('/api/v1/auth/passphrase', authMiddleware);
   app.route('/api/v1/auth', createAuthRouter());
 
+  // OAuth redirect callbacks (outside authMiddleware; never echoes tokens)
+  app.route('/api/v1/integrations', createIntegrationsCallbackRouter());
+
   app.onError((err, c) => {
     if (err instanceof AppError) {
       return c.json(
@@ -189,15 +204,17 @@ export function createApp(deps: AppDependencies = {}) {
     }
 
     const providers = {
-      youtube: c.env.YOUTUBE_API_KEY ? 'YouTube API' : 'YouTube RSS',
+      youtube: c.env.YOUTUBE_API_KEY
+        ? { status: 'api_key_active', label: 'YouTube API' }
+        : { status: 'public_feed_active', label: 'YouTube RSS' },
       twitch:
         c.env.TWITCH_CLIENT_ID && c.env.TWITCH_CLIENT_SECRET
-          ? 'Twitch Helix'
-          : 'credentials_missing',
+          ? { status: 'ready', label: 'Twitch Helix' }
+          : { status: 'credentials_missing', label: 'Twitch Needs API Keys' },
       kick:
         c.env.KICK_CLIENT_ID && c.env.KICK_CLIENT_SECRET
-          ? 'Kick API'
-          : 'credentials_missing',
+          ? { status: 'ready', label: 'Kick API' }
+          : { status: 'credentials_missing', label: 'Kick Needs API Keys' },
     };
 
     return c.json({
@@ -245,6 +262,7 @@ export function createApp(deps: AppDependencies = {}) {
   app.route('/api/v1/alerts', createAlertsRouter());
   app.route('/api/v1/notifications', createNotificationsRouter());
   app.route('/api/v1/clips', createClipsRouter());
+  app.route('/api/v1/admin/integrations', createAdminIntegrationsRouter());
   app.route('/api/v1', createReportsRouter());
   app.route('/api/v1', createSettingsRouter());
 

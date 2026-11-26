@@ -8,6 +8,8 @@ import type {
   ClipRecord,
   DailyReportData,
   FeedResponse,
+  IntegrationVerifyResponse,
+  IntegrationsResponse,
   ItemKind,
   LiveResponse,
   NotificationPrefs,
@@ -351,4 +353,17 @@ export async function deleteWorkspace(): Promise<{ ok: boolean }> {
   return requestJson<{ ok: boolean }>('/api/v1/settings/workspace', {
     method: 'DELETE',
   });
+}
+
+export async function fetchAdminIntegrations(): Promise<IntegrationsResponse> {
+  return requestJson<IntegrationsResponse>('/api/v1/admin/integrations');
+}
+
+export async function verifyAdminIntegration(
+  platform: Platform,
+): Promise<IntegrationVerifyResponse> {
+  return requestJson<IntegrationVerifyResponse>(
+    `/api/v1/admin/integrations/${encodeURIComponent(platform)}/verify`,
+    { method: 'POST' },
+  );
 }

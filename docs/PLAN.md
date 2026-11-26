@@ -43,8 +43,8 @@ flowchart LR
 |---|---|---|---|---|---|
 | V0 | Brief redact, `.dev.vars`, Reality Audit, `PLAN.md`, ADR-003 | lead, reviewer | — | Audit gaps logged, git history clean | done |
 | V1 | `_headers`, 3-user verified login, purge F-01/F-07, `0006`, fix F-02..F-12 | backend, frontend, reviewer | V0 | Regression tests for F-01..F-12 pass | done |
-| V2 | Twitch/Kick OAuth+EventSub+webhooks, YT `videos.list`+30d purge, Integrations UI | ingestion, backend, frontend | V1 | Live YT/mocked TW+KK contract tests pass | in_progress |
-| V3 | 3-lane Discover (`>=100` Shorts precision `>=98%`), Mission Control, Kanban Work Board, responsive `F-18` | backend, frontend, reviewer | V2 | Lane, Kanban overlap, WS sync tests pass | pending |
+| V2 | Twitch/Kick OAuth+EventSub+webhooks, YT `videos.list`+30d purge, Integrations UI | ingestion, backend, frontend | V1 | Live YT/mocked TW+KK contract tests pass | done |
+| V3 | 3-lane Discover (`>=100` Shorts precision `>=98%`), Mission Control, Kanban Work Board, responsive `F-18` | backend, frontend, reviewer | V2 | Lane, Kanban overlap, WS sync tests pass | in_progress |
 | V4 | Rising v2 (creator baseline, backfill-safe), Live Moments, Alerts v2 lifecycle/Discord/Push/shift | signals, backend, frontend | V3 | Rising/Live/Discord/Push tests pass | pending |
 | V5 | Creators Intelligence, Clip Log + Our Channels + ROI + Scorecard, Daily/Weekly + Gemini AI, Admin | backend, frontend, reviewer | V4 | All 14 E2E scenarios & truth audit pass | pending |
 | V6 | Playwright 3-engine x 4-viewport + axe + Lighthouse + bundle budgets + D1 restore drill | qa, perf, reviewer | V5 | Zero violations, JS `<=170KB`, CSS `<=25KB` | pending |

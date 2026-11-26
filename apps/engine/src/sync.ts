@@ -11,6 +11,7 @@ import {
   type RisingBaselineSample,
 } from '@clipse/core';
 import { processIngestBatch } from './ingest.js';
+import { syncKickAccount, syncTwitchAccount } from './provider-sync.js';
 import type { FetchLike } from '@clipse/core';
 
 export interface SyncEnv {
@@ -128,6 +129,16 @@ async function syncYouTubeAccount(
         thumbnailUrl: item.thumbnailUrl,
         publishedAt: item.publishedAt,
         isBackfill: isInitialBackfill,
+        durationSec: item.durationSec,
+        shortsClassification:
+          item.shortsClassification ??
+          (item.kind === 'short'
+            ? 'short'
+            : item.kind === 'live'
+              ? 'live'
+              : env.YOUTUBE_API_KEY
+                ? 'video'
+                : 'unclassified'),
       },
     });
   }
@@ -315,39 +326,8 @@ export async function syncPlatformAccount(
   if (input.platform === 'youtube') {
     return syncYouTubeAccount(db, env, input.externalId, deps);
   }
-
   if (input.platform === 'twitch') {
-    if (!env.TWITCH_CLIENT_ID || !env.TWITCH_CLIENT_SECRET) {
-      return {
-        ok: true,
-        status: 'credentials_missing',
-        itemsSynced: 0,
-        message: 'Twitch API credentials (TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET) are not configured',
-      };
-    }
-    return {
-      ok: true,
-      status: 'synced',
-      itemsSynced: 0,
-      resolvedExternalId: input.externalId,
-      message: 'Twitch sync requires an app access token exchange via EventSub/Helix',
-    };
+    return syncTwitchAccount(db, env, input.externalId, deps);
   }
-
-  if (!env.KICK_CLIENT_ID || !env.KICK_CLIENT_SECRET) {
-    return {
-      ok: true,
-      status: 'credentials_missing',
-      itemsSynced: 0,
-      message: 'Kick API credentials (KICK_CLIENT_ID / KICK_CLIENT_SECRET) are not configured',
-    };
-  }
-
-  return {
-    ok: true,
-    status: 'synced',
-    itemsSynced: 0,
-    resolvedExternalId: input.externalId,
-    message: 'Kick sync requires an OAuth 2.1 access token exchange',
-  };
+  return syncKickAccount(db, env, input.externalId, deps);
 }

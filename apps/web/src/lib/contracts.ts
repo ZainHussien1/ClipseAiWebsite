@@ -278,3 +278,41 @@ export interface WorkspaceMember {
   role: WorkspaceRole;
   createdAt?: string;
 }
+
+export type IntegrationStatus =
+  | 'not_configured'
+  | 'verifying'
+  | 'healthy'
+  | 'degraded'
+  | 'failing';
+
+export interface IntegrationDetail {
+  platform: Platform;
+  status: IntegrationStatus;
+  mode: string;
+  secretPresence: Record<string, boolean>;
+  quotaUsedToday: number;
+  quotaLimitDaily: number;
+  subscriptionCount: number;
+  nextLeaseRenewalAt: string | null;
+  callbackUrls: {
+    webhookUrl: string;
+    oauthCallbackUrl: string | null;
+  };
+  setupSteps: string[];
+}
+
+export interface IntegrationsResponse {
+  integrations: IntegrationDetail[];
+  extraSecrets: Record<string, boolean>;
+  source: string;
+  asOf: string;
+}
+
+export interface IntegrationVerifyResponse {
+  ok: boolean;
+  platform: Platform;
+  status: IntegrationStatus;
+  message: string;
+  checkedAt: string;
+}

@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../types.js';
-import { KickProvider } from './kick.js';
+import {
+  clearKickCaches,
+  exchangeKickAppToken,
+  fetchKickPublicKey,
+  KickProvider,
+} from './kick.js';
 import { TokenBucketQuotaGovernor } from './quota.js';
-import { TwitchProvider } from './twitch.js';
+import {
+  clearTwitchTokenCache,
+  exchangeTwitchAppToken,
+  TwitchProvider,
+} from './twitch.js';
 import { parseYouTubeWebSubAtom, YouTubeProvider } from './youtube.js';
 
 const YOUTUBE_ATOM_NEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
@@ -94,6 +103,8 @@ describe('YouTubeProvider & WebSub parser', () => {
       externalId: 'vidShort01',
       kind: 'short',
       url: 'https://www.youtube.com/shorts/vidShort01',
+      durationSec: 45,
+      shortsClassification: 'short',
     });
 
     const stats = await yt.fetchStatsBatch(['vidShort01']);
@@ -216,5 +227,61 @@ describe('KickProvider', () => {
       viewers: 1500,
     });
     expect(status[1]).toEqual({ accountExternalId: '888', isLive: false });
+  });
+
+  it('exchanges Twitch & Kick OAuth app tokens with caching and fetches Kick public key', async () => {
+    clearTwitchTokenCache();
+    clearKickCaches();
+    let twitchCalls = 0;
+    let kickTokenCalls = 0;
+    let kickPubKeyCalls = 0;
+
+    const fetchFn = async (input: string | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === 'https://id.twitch.tv/oauth2/token') {
+        twitchCalls++;
+        return Response.json({
+          access_token: 'tw-app-token',
+          expires_in: 3600,
+          token_type: 'bearer',
+        });
+      }
+      if (url === 'https://id.kick.com/oauth/token') {
+        kickTokenCalls++;
+        return Response.json({
+          access_token: 'kk-app-token',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        });
+      }
+      if (url === 'https://api.kick.com/public/v1/public-key') {
+        kickPubKeyCalls++;
+        return Response.json({
+          data: {
+            public_key: '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAtest\n-----END PUBLIC KEY-----',
+          },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    };
+
+    const now = Date.UTC(2026, 10, 27, 0, 0, 0);
+    const tw1 = await exchangeTwitchAppToken('tw-cid', 'tw-sec', fetchFn, now);
+    const tw2 = await exchangeTwitchAppToken('tw-cid', 'tw-sec', fetchFn, now + 5000);
+    expect(tw1.accessToken).toBe('tw-app-token');
+    expect(tw2.accessToken).toBe('tw-app-token');
+    expect(twitchCalls).toBe(1);
+
+    const kk1 = await exchangeKickAppToken('kk-cid', 'kk-sec', fetchFn, now);
+    const kk2 = await exchangeKickAppToken('kk-cid', 'kk-sec', fetchFn, now + 5000);
+    expect(kk1.accessToken).toBe('kk-app-token');
+    expect(kk2.accessToken).toBe('kk-app-token');
+    expect(kickTokenCalls).toBe(1);
+
+    const pk1 = await fetchKickPublicKey(fetchFn, now);
+    const pk2 = await fetchKickPublicKey(fetchFn, now + 5000);
+    expect(pk1).toContain('BEGIN PUBLIC KEY');
+    expect(pk2).toBe(pk1);
+    expect(kickPubKeyCalls).toBe(1);
   });
 });

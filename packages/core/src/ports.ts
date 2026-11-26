@@ -21,6 +21,8 @@ export interface ProviderItem {
   readonly url: string;
   readonly thumbnailUrl?: string;
   readonly publishedAt: string;
+  readonly durationSec?: number;
+  readonly shortsClassification?: 'video' | 'short' | 'live' | 'unclassified';
 }
 
 export interface ProviderItemStats {

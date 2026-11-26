@@ -495,3 +495,50 @@ export const setPassphraseSchema = z.object({
   passphrase: z.string().min(8).max(128),
 });
 export type SetPassphraseInput = z.infer<typeof setPassphraseSchema>;
+
+// ============================================================================
+// V2: Provider Integrations & Verification
+// ============================================================================
+
+export const integrationStatusSchema = z.enum([
+  'not_configured',
+  'verifying',
+  'healthy',
+  'degraded',
+  'failing',
+]);
+export type IntegrationStatus = z.infer<typeof integrationStatusSchema>;
+
+export const integrationDetailSchema = z.object({
+  platform: platformSchema,
+  status: integrationStatusSchema,
+  mode: z.string(),
+  secretPresence: z.record(z.boolean()),
+  quotaUsedToday: z.number().int().nonnegative(),
+  quotaLimitDaily: z.number().int().positive(),
+  subscriptionCount: z.number().int().nonnegative(),
+  nextLeaseRenewalAt: z.string().nullable(),
+  callbackUrls: z.object({
+    webhookUrl: z.string(),
+    oauthCallbackUrl: z.string().nullable(),
+  }),
+  setupSteps: z.array(z.string()),
+});
+export type IntegrationDetail = z.infer<typeof integrationDetailSchema>;
+
+export const integrationsResponseSchema = z.object({
+  integrations: z.array(integrationDetailSchema),
+  extraSecrets: z.record(z.boolean()),
+  source: z.string(),
+  asOf: z.string(),
+});
+export type IntegrationsResponse = z.infer<typeof integrationsResponseSchema>;
+
+export const integrationVerifyResponseSchema = z.object({
+  ok: z.boolean(),
+  platform: platformSchema,
+  status: integrationStatusSchema,
+  message: z.string(),
+  checkedAt: z.string(),
+});
+export type IntegrationVerifyResponse = z.infer<typeof integrationVerifyResponseSchema>;
