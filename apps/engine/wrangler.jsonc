@@ -33,5 +33,40 @@
   "vars": {
     "ENVIRONMENT": "staging",
     "AI_INSIGHTS_ENABLED": "false"
+  },
+  "env": {
+    "production": {
+      "name": "clipse-radar-engine-prod",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "clipse-radar-prod-db",
+          "database_id": "007589e9-208a-4aa3-a21a-8f17eafdad1f"
+        }
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "queue": "ingest-queue-prod",
+            "max_batch_size": 25,
+            "max_batch_timeout": 5,
+            "dead_letter_queue": "ingest-dlq-prod"
+          },
+          {
+            "queue": "notify-queue-prod",
+            "max_batch_size": 25,
+            "max_batch_timeout": 5,
+            "dead_letter_queue": "notify-dlq-prod"
+          }
+        ]
+      },
+      "triggers": {
+        "crons": ["*/5 * * * *", "0 * * * *"]
+      },
+      "vars": {
+        "ENVIRONMENT": "prod",
+        "AI_INSIGHTS_ENABLED": "false"
+      }
+    }
   }
 }

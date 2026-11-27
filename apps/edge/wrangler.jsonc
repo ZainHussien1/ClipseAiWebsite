@@ -54,5 +54,49 @@
   "vars": {
     "ENVIRONMENT": "staging",
     "AI_INSIGHTS_ENABLED": "false"
+  },
+  "env": {
+    "production": {
+      "name": "clipse-radar",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "clipse-radar-prod-db",
+          "database_id": "007589e9-208a-4aa3-a21a-8f17eafdad1f",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "WORKSPACE_DO",
+            "class_name": "WorkspaceDO"
+          }
+        ]
+      },
+      "queues": {
+        "producers": [
+          {
+            "binding": "INGEST_QUEUE",
+            "queue": "ingest-queue-prod"
+          },
+          {
+            "binding": "NOTIFY_QUEUE",
+            "queue": "notify-queue-prod"
+          }
+        ]
+      },
+      "services": [
+        {
+          "binding": "ENGINE",
+          "service": "clipse-radar-engine-prod",
+          "entrypoint": "EngineEntrypoint"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "prod",
+        "AI_INSIGHTS_ENABLED": "false"
+      }
+    }
   }
 }

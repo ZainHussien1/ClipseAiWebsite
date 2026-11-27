@@ -28,7 +28,7 @@ export function TopBar({
   onOpenMobileDrawer,
 }: TopBarProps) {
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--bg)] px-3 sm:px-5">
+    <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--bg)] px-3 py-1 sm:px-5">
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -41,7 +41,7 @@ export function TopBar({
         <button
           type="button"
           onClick={onOpenCommandPalette}
-          className="inline-flex min-h-[36px] items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-[12px] text-[var(--text-secondary)] hover:border-[var(--input-border)] hover:text-[var(--text-primary)]"
+          className="inline-flex min-h-[44px] items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-[12px] text-[var(--text-secondary)] hover:border-[var(--input-border)] hover:text-[var(--text-primary)]"
         >
           <Search className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
           <span className="hidden sm:inline">Jump to route or action...</span>

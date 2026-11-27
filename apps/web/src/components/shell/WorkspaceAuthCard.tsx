@@ -105,7 +105,7 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
               setTab('code');
               setErrorMsg(null);
             }}
-            className={`inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-md text-[12px] font-medium ${
+            className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-md text-[12px] font-medium ${
               tab === 'code'
                 ? 'bg-[var(--accent-tint)] text-[var(--text-strong)]'
                 : 'text-[var(--text-secondary)]'
@@ -120,7 +120,7 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
               setTab('passphrase');
               setErrorMsg(null);
             }}
-            className={`inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-md text-[12px] font-medium ${
+            className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-md text-[12px] font-medium ${
               tab === 'passphrase'
                 ? 'bg-[var(--accent-tint)] text-[var(--text-strong)]'
                 : 'text-[var(--text-secondary)]'
@@ -140,7 +140,7 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@studio.com"
-              className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              className="mt-1 min-h-[44px] w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
             />
           </label>
 
@@ -153,7 +153,7 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
                 placeholder="Clipse Studio"
-                className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                className="mt-1 min-h-[44px] w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </label>
           )}
@@ -164,7 +164,7 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
                 type="button"
                 disabled={requestCodeMutation.isPending}
                 onClick={handleRequestCode}
-                className="min-h-[40px] w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:border-[var(--accent)] disabled:opacity-50"
+                className="min-h-[44px] w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:border-[var(--accent)] disabled:opacity-50"
               >
                 {requestCodeMutation.isPending
                   ? 'Sending verification code...'
@@ -180,7 +180,7 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="123456"
-                  className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 font-mono text-[13px] tracking-widest text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                  className="mt-1 min-h-[44px] w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 font-mono text-[13px] tracking-widest text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                 />
               </label>
             </div>
@@ -194,7 +194,7 @@ export function WorkspaceAuthCard({ hasWorkspace }: WorkspaceAuthCardProps) {
                 value={passphrase}
                 onChange={(e) => setPassphrase(e.target.value)}
                 placeholder="Enter passphrase"
-                className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                className="mt-1 min-h-[44px] w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </label>
           )}

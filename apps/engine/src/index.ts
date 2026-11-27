@@ -85,7 +85,7 @@ export default {
     env: EngineEnv,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    if (batch.queue === 'ingest-queue') {
+    if (batch.queue.startsWith('ingest-queue')) {
       const bodies = batch.messages.map((m) => m.body);
       const result = await processIngestBatch(env.DB, bodies);
       for (const message of batch.messages) {
@@ -95,7 +95,7 @@ export default {
       return;
     }
 
-    if (batch.queue === 'notify-queue') {
+    if (batch.queue.startsWith('notify-queue')) {
       const bodies = batch.messages.map((m) => m.body);
       const result = await processNotifyBatch(env.DB, env, bodies);
       const retryOpts = result.retryAfterSeconds

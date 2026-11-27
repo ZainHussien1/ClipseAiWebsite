@@ -63,7 +63,7 @@ export function StatusPill({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label="System Status"
-        className="inline-flex min-h-[32px] items-center gap-2 rounded-full px-2.5 py-1 text-[12px] font-medium"
+        className="inline-flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1 text-[12px] font-medium"
         style={{
           backgroundColor: style.bg,
           color: style.color,

@@ -4,27 +4,28 @@
 
 All services run on Cloudflare Free Tier (`$0/mo`, no paid add-ons required):
 
-1. **Create D1 database & Queues (one-time):**
-   - Create D1 database `clipse-radar-db` and set `database_id` in `apps/edge/wrangler.jsonc` and `apps/engine/wrangler.jsonc`.
-   - Create Queues: `ingest-queue`, `ingest-dlq`, `notify-queue`, `notify-dlq`.
-2. **Apply D1 Migrations (`0001..0005`):**
+- **Production:** `https://clipse-radar.swattopandhappy.workers.dev` (`clipse-radar`, DB `clipse-radar-prod-db` `007589e9-208a-4aa3-a21a-8f17eafdad1f`, engine `clipse-radar-engine-prod`)
+- **Staging:** `https://clipse-radar-edge.swattopandhappy.workers.dev` (`clipse-radar-edge`, DB `clipse-radar-db` `0b4693d5-eec1-4ab6-a6c6-5a9911de24a8`, engine `clipse-radar-engine`)
+
+1. **Apply D1 Migrations (`0001..0009`):**
    ```powershell
    cmd /c pnpm --filter @clipse/edge exec wrangler d1 migrations apply clipse-radar-db --remote
+   cmd /c pnpm --filter @clipse/edge exec wrangler d1 migrations apply clipse-radar-prod-db --env production --remote
    ```
-3. **Upload Worker Secrets (NEVER commit `.dev.vars`):**
+2. **Upload Worker Secrets (NEVER commit `.dev.vars`):**
    ```powershell
-   cmd /c pnpm --filter @clipse/edge exec wrangler secret bulk .dev.vars
-   cmd /c pnpm --filter @clipse/engine exec wrangler secret bulk .dev.vars
+   cmd /c pnpm --filter @clipse/engine exec wrangler secret bulk ../../.dev.vars --env production
+   cmd /c pnpm --filter @clipse/edge exec wrangler secret bulk ../../.dev.vars --env production
    ```
-4. **Deploy `engine` first, then `edge`:**
+3. **Deploy `engine` first, then `edge`:**
    ```powershell
    cmd /c pnpm --filter @clipse/web build
-   cmd /c pnpm --filter @clipse/engine exec wrangler deploy
-   cmd /c pnpm --filter @clipse/edge exec wrangler deploy
+   cmd /c pnpm --filter @clipse/engine exec wrangler deploy --env production
+   cmd /c pnpm --filter @clipse/edge exec wrangler deploy --env production
    ```
-5. **Cloudflare Access Free (<=50 users) & `/hooks/*` Bypass:**
-   - Protect the app domain with Cloudflare Access; `edge` independently verifies `Cf-Access-Jwt-Assertion` via `jose` JWKS (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`).
-   - Add an Access **Bypass** policy for `/hooks/*` so YouTube WebSub, Twitch EventSub, and Kick webhooks reach `edge` over public HTTPS (verified via HMAC/Ed25519 signatures + 24h replay dedupe).
+4. **3-User Allowlist & Optional Provider Keys:**
+   - First-time login: request a 6-digit OTP via `Send 6-digit verification code` (delivered to team Discord webhook) or sign in with a configured member passphrase.
+   - Add `YOUTUBE_API_KEY`, `TWITCH_CLIENT_ID`/`SECRET`/`EVENTSUB_SECRET`, `KICK_CLIENT_ID`/`SECRET` via `wrangler secret put <KEY> --env production` when ready.
 
 ## 2. Windows 10/11 Local Development
 

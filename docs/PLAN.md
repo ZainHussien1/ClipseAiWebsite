@@ -47,5 +47,5 @@ flowchart LR
 | V3 | 3-lane Discover (`>=100` Shorts precision `>=98%`), Mission Control, Kanban Work Board, responsive `F-18` | backend, frontend, reviewer | V2 | Lane, Kanban overlap, WS sync tests pass | done |
 | V4 | Rising v2 (creator baseline, backfill-safe), Live Moments, Alerts v2 lifecycle/Discord/Push/shift | signals, backend, frontend | V3 | Rising/Live/Discord/Push tests pass | done |
 | V5 | Creators Intelligence, Clip Log + Our Channels + ROI + Scorecard, Daily/Weekly + Gemini AI, Admin | backend, frontend, reviewer | V4 | All 14 E2E scenarios & truth audit pass | done |
-| V6 | Playwright 3-engine x 4-viewport + axe + Lighthouse + bundle budgets + D1 restore drill | qa, perf, reviewer | V5 | Zero violations, JS `<=170KB`, CSS `<=25KB` | in_progress |
-| V7 | Production deploy (`wrangler secret put`, D1 migrate, deploy, live smoke, Discord alert, `RUNBOOK.md`) | platform, lead | V6 | Live Prod URL green + Discord verified | pending |
+| V6 | Playwright 3-engine x 4-viewport + axe + Lighthouse + bundle budgets + D1 restore drill | qa, perf, reviewer | V5 | Zero violations, JS `<=170KB`, CSS `<=25KB` | done |
+| V7 | Production deploy (`wrangler secret put`, D1 migrate, deploy, live smoke, Discord alert, `RUNBOOK.md`) | platform, lead | V6 | Live Prod URL green + Discord verified | done |
