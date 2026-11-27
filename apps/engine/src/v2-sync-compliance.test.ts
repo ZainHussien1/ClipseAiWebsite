@@ -288,7 +288,7 @@ describe('V2 Twitch/Kick sync, YouTube enrichment, and 30-day compliance', () =>
             {
               snippet: {
                 channelId: 'UC_x5XG1OV2P6uZZ5FSM9Ttw',
-                title: 'Fast Short',
+                title: 'Fast Short #shorts',
                 publishedAt: '2026-11-26T18:00:00Z',
                 resourceId: { videoId: 'ytV01' },
               },

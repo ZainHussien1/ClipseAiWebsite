@@ -104,7 +104,7 @@ export function AppShell() {
           onRetry={refreshHealth}
         />
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 pt-5 sm:px-6 md:pb-8">
+        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-20 pt-5 sm:px-6 md:pb-8">
           {authQuery.isLoading ? (
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-[12px] text-[var(--text-secondary)]">
               Checking workspace session...

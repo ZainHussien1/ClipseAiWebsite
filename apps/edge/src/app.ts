@@ -26,10 +26,12 @@ import {
   createIntegrationsCallbackRouter,
 } from './routes/integrations.js';
 import { createLiveRouter } from './routes/live.js';
+import { createMissionControlRouter } from './routes/mission-control.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createProvidersRouter } from './routes/providers.js';
 import { createReportsRouter } from './routes/reports.js';
 import { createRisingRouter } from './routes/rising.js';
+import { createSavedViewsRouter } from './routes/saved-views.js';
 import { createSettingsRouter } from './routes/settings.js';
 import { createSourcesRouter } from './routes/sources.js';
 import { csrfMiddleware, securityHeadersMiddleware } from './security.js';
@@ -151,6 +153,7 @@ export function createApp(deps: AppDependencies = {}) {
           error: {
             code: err.code,
             message: err.message,
+            ...(err.details !== undefined ? { details: err.details } : {}),
           },
         },
         err.status as 400 | 401 | 403 | 404 | 409 | 429 | 500,
@@ -236,6 +239,10 @@ export function createApp(deps: AppDependencies = {}) {
   app.use('/api/v1/sources', authMiddleware);
   app.use('/api/v1/sources/*', authMiddleware);
   app.use('/api/v1/feed', authMiddleware);
+  app.use('/api/v1/feed/*', authMiddleware);
+  app.use('/api/v1/saved-views', authMiddleware);
+  app.use('/api/v1/saved-views/*', authMiddleware);
+  app.use('/api/v1/mission-control', authMiddleware);
   app.use('/api/v1/live', authMiddleware);
   app.use('/api/v1/rising', authMiddleware);
   app.use('/api/v1/claims', authMiddleware);
@@ -256,6 +263,8 @@ export function createApp(deps: AppDependencies = {}) {
   app.route('/api/v1/sources', createSourcesRouter());
   app.route('/api/v1/providers', createProvidersRouter());
   app.route('/api/v1/feed', createFeedRouter());
+  app.route('/api/v1/saved-views', createSavedViewsRouter());
+  app.route('/api/v1/mission-control', createMissionControlRouter());
   app.route('/api/v1/live', createLiveRouter());
   app.route('/api/v1/rising', createRisingRouter());
   app.route('/api/v1/claims', createClaimsRouter());

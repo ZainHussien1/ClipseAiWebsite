@@ -7,19 +7,27 @@ import type {
   ClipPlatform,
   ClipRecord,
   DailyReportData,
+  FeedAge,
+  FeedLane,
   FeedResponse,
+  FeedSort,
   IntegrationVerifyResponse,
   IntegrationsResponse,
+  ItemDetail,
   ItemKind,
   LiveResponse,
+  MissionControlData,
   NotificationPrefs,
   NotificationRecord,
   Platform,
   PushSubscriptionInput,
   RisingResponse,
+  SavedViewFilters,
+  SavedViewRecord,
   ScorecardData,
   SourceItem,
   SourceRoiEntry,
+  WorkBoardResponse,
   WorkspaceMember,
   WorkspaceRole,
 } from './contracts';
@@ -71,6 +79,10 @@ export async function fetchProviderStatus(): Promise<ProviderStatusMap> {
     return data.providers;
   }
   return data as ProviderStatusMap;
+}
+
+export async function fetchMissionControl(): Promise<MissionControlData> {
+  return requestJson<MissionControlData>('/api/v1/mission-control');
 }
 
 export async function listSources(): Promise<SourceItem[]> {
@@ -133,6 +145,12 @@ export async function fetchFeed(params: {
   limit?: number;
   platform?: Platform;
   kind?: ItemKind;
+  lane?: FeedLane;
+  sort?: FeedSort;
+  age?: FeedAge;
+  minViews?: number;
+  unseenOnly?: boolean;
+  accountId?: string;
   starredOnly?: boolean;
   q?: string;
 }): Promise<FeedResponse> {
@@ -141,10 +159,54 @@ export async function fetchFeed(params: {
   if (params.limit) qs.set('limit', String(params.limit));
   if (params.platform) qs.set('platform', params.platform);
   if (params.kind) qs.set('kind', params.kind);
+  if (params.lane) qs.set('lane', params.lane);
+  if (params.sort) qs.set('sort', params.sort);
+  if (params.age) qs.set('age', params.age);
+  if (params.minViews !== undefined) qs.set('minViews', String(params.minViews));
+  if (params.unseenOnly) qs.set('unseenOnly', 'true');
+  if (params.accountId) qs.set('accountId', params.accountId);
   if (params.starredOnly) qs.set('starredOnly', 'true');
   if (params.q) qs.set('q', params.q);
   const query = qs.toString();
   return requestJson<FeedResponse>(`/api/v1/feed${query ? `?${query}` : ''}`);
+}
+
+export async function fetchItemDetail(itemId: string): Promise<ItemDetail> {
+  return requestJson<ItemDetail>(`/api/v1/feed/${encodeURIComponent(itemId)}/detail`);
+}
+
+export async function markItemsSeen(input: {
+  itemIds?: string[];
+  accountId?: string;
+  all?: boolean;
+}): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>('/api/v1/feed/mark-seen', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listSavedViews(): Promise<SavedViewRecord[]> {
+  const data = await requestJson<{ views?: SavedViewRecord[] } | SavedViewRecord[]>(
+    '/api/v1/saved-views',
+  );
+  return Array.isArray(data) ? data : (data.views ?? []);
+}
+
+export async function createSavedView(
+  name: string,
+  filters: SavedViewFilters,
+): Promise<SavedViewRecord> {
+  return requestJson<SavedViewRecord>('/api/v1/saved-views', {
+    method: 'POST',
+    body: JSON.stringify({ name, filters }),
+  });
+}
+
+export async function deleteSavedView(id: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/saved-views/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function fetchLive(): Promise<LiveResponse> {
@@ -164,12 +226,8 @@ export async function fetchRising(params: {
   return requestJson<RisingResponse>(`/api/v1/rising${query ? `?${query}` : ''}`);
 }
 
-export async function listClaims(): Promise<ClaimRecord[]> {
-  const data = await requestJson<{ claims?: ClaimRecord[]; items?: ClaimRecord[] } | ClaimRecord[]>(
-    '/api/v1/claims',
-  );
-  if (Array.isArray(data)) return data;
-  return data.claims ?? data.items ?? [];
+export async function fetchWorkBoard(): Promise<WorkBoardResponse> {
+  return requestJson<WorkBoardResponse>('/api/v1/claims');
 }
 
 export async function createClaim(input: {
@@ -184,9 +242,16 @@ export async function createClaim(input: {
   });
 }
 
+export async function claimFromAlert(alertId: string): Promise<ClaimRecord> {
+  return requestJson<ClaimRecord>(
+    `/api/v1/claims/from-alert/${encodeURIComponent(alertId)}`,
+    { method: 'POST' },
+  );
+}
+
 export async function updateClaim(
   claimId: string,
-  patch: { status: ClaimStatus; note?: string | null },
+  patch: { status: ClaimStatus; note?: string | null; clipUrl?: string | null },
 ): Promise<ClaimRecord> {
   return requestJson<ClaimRecord>(`/api/v1/claims/${encodeURIComponent(claimId)}`, {
     method: 'PATCH',

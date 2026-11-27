@@ -5,7 +5,14 @@ import { platformSchema } from './types.js';
 export const risingTierSchema = z.enum(['none', 'rising', 'breakout', 'viral']);
 export type RisingTier = z.infer<typeof risingTierSchema>;
 
-export const claimStatusSchema = z.enum(['New', 'Claimed', 'Clipped', 'Skipped']);
+export const claimStatusSchema = z.enum([
+  'New',
+  'Claimed',
+  'Clipping',
+  'Clipped',
+  'Published',
+  'Skipped',
+]);
 export type ClaimStatus = z.infer<typeof claimStatusSchema>;
 
 export const sourceRuleSchema = z.object({
@@ -76,6 +83,14 @@ export const feedQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   platform: platformSchema.optional(),
   kind: itemKindSchema.optional(),
+  lane: z.enum(['videos', 'shorts', 'live', 'unclassified']).optional(),
+  sort: z.enum(['newest', 'rising', 'views']).optional().default('newest'),
+  age: z.enum(['6h', '24h', '72h', '7d']).optional(),
+  minViews: z.coerce.number().int().nonnegative().optional(),
+  unseenOnly: z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .optional()
+    .transform((v) => v === true || v === 'true' || v === '1'),
   accountId: z.string().trim().min(1).max(128).optional(),
   starredOnly: z
     .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
@@ -102,18 +117,26 @@ export const feedItemSchema = z.object({
   platform: platformSchema,
   externalId: z.string(),
   kind: itemKindSchema,
+  shortsClassification: z
+    .enum(['video', 'short', 'live', 'unclassified'])
+    .nullable(),
   title: z.string(),
   url: z.string(),
   thumbnailUrl: z.string().nullable(),
   publishedAt: z.string(),
   firstSeenAt: z.string(),
+  dayGroup: z.string(),
   isBackfill: z.boolean(),
+  isSeen: z.boolean(),
   durationSec: z.number().int().nonnegative().nullable(),
   ingestLatencyMs: z.number().int().nonnegative().nullable(),
   latestViews: z.number().int().nonnegative().nullable(),
   latestLikes: z.number().int().nonnegative().nullable(),
   latestComments: z.number().int().nonnegative().nullable(),
   snapshotCount: z.number().int().nonnegative(),
+  risingScore: z.number().nullable(),
+  risingTier: risingTierSchema.exclude(['none']).nullable(),
+  risingReason: z.string().nullable(),
   claimStatus: claimStatusSchema.nullable(),
   claim: itemClaimInfoSchema.nullable(),
   source: z.string(),
@@ -124,6 +147,22 @@ export type FeedItem = z.infer<typeof feedItemSchema>;
 export const feedResponseSchema = z.object({
   items: z.array(feedItemSchema),
   nextCursor: z.string().nullable(),
+  laneCounts: z.object({
+    videos: z.number().int().nonnegative(),
+    shorts: z.number().int().nonnegative(),
+    live: z.number().int().nonnegative(),
+    unclassified: z.number().int().nonnegative(),
+  }),
+  creatorsRail: z.array(
+    z.object({
+      accountId: z.string(),
+      handle: z.string(),
+      displayName: z.string(),
+      platform: platformSchema,
+      unseenCount: z.number().int().nonnegative(),
+      starred: z.boolean(),
+    }),
+  ),
   source: z.string(),
   asOf: z.string(),
 });
@@ -211,6 +250,15 @@ export type CreateClaimInput = z.infer<typeof createClaimSchema>;
 export const updateClaimSchema = z.object({
   status: claimStatusSchema,
   note: z.string().trim().max(500).nullable().optional(),
+  clipUrl: z
+    .string()
+    .trim()
+    .url()
+    .refine((u) => u.startsWith('https://'), {
+      message: 'Clip URL must use https://',
+    })
+    .nullable()
+    .optional(),
 });
 export type UpdateClaimInput = z.infer<typeof updateClaimSchema>;
 
@@ -223,6 +271,7 @@ export const claimRecordSchema = z.object({
   endSec: z.number().int().positive().nullable(),
   status: claimStatusSchema,
   note: z.string().nullable(),
+  clipUrl: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

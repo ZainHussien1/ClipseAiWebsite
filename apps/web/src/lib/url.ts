@@ -29,9 +29,39 @@ export function safeExternalUrl(raw: string): string | null {
   }
 }
 
+export function safeThumbnailUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'https:' ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeHandle(raw: string): string {
   const clean = raw.trim().replace(/^@+/, '');
   return clean ? `@${clean}` : 'unknown';
+}
+
+export function parseMmSsToSec(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  }
+  const match = /^(\d+):([0-5]\d)$/.exec(trimmed);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+export function formatSecToMmSs(sec: number | null | undefined): string {
+  if (sec === null || sec === undefined || !Number.isFinite(sec)) return '0:00';
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}:${String(rem).padStart(2, '0')}`;
 }
 
 export function formatAgeSeconds(seconds: number | null | undefined): string {

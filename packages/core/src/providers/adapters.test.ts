@@ -73,7 +73,7 @@ describe('YouTubeProvider & WebSub parser', () => {
             {
               snippet: {
                 channelId: 'UC_x5XG1OV2P6uZZ5FSM9Ttw',
-                title: 'Short Clip',
+                title: 'Short Clip #shorts',
                 publishedAt: '2026-11-26T10:00:00Z',
                 resourceId: { videoId: 'vidShort01' },
               },

@@ -3,7 +3,8 @@ import {
   BellRing,
   ClipboardCheck,
   FileBarChart2,
-  Home,
+  KanbanSquare,
+  LayoutDashboard,
   Radio,
   Rss,
   Scissors,
@@ -13,20 +14,21 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type NavSection = 'WORKSPACE' | 'LIVE MODULE';
+export type NavSection = 'Command' | 'Discover' | 'Work' | 'Insights' | 'Admin';
 
 export type AppRoutePath =
   | '/'
+  | '/live'
+  | '/alerts'
   | '/feed'
   | '/rising'
-  | '/alerts'
   | '/sources'
+  | '/work'
   | '/my-work'
-  | '/notifications'
   | '/clip-log'
   | '/reports'
-  | '/settings'
-  | '/live';
+  | '/notifications'
+  | '/settings';
 
 export interface NavItem {
   to: AppRoutePath;
@@ -36,82 +38,91 @@ export interface NavItem {
   description: string;
 }
 
+export const NAV_SECTIONS: NavSection[] = ['Command', 'Discover', 'Work', 'Insights', 'Admin'];
+
 export const NAV_ITEMS: NavItem[] = [
   {
     to: '/',
-    label: 'Overview',
-    section: 'WORKSPACE',
-    icon: Home,
-    description: 'System health, Access identity, and workspace status.',
-  },
-  {
-    to: '/feed',
-    label: 'Feed',
-    section: 'WORKSPACE',
-    icon: Rss,
-    description: 'Unified creator upload & stream feed with first-seen latency stamps.',
-  },
-  {
-    to: '/rising',
-    label: 'Rising',
-    section: 'WORKSPACE',
-    icon: TrendingUp,
-    description: 'Velocity & engagement breakout detector with hysteresis.',
-  },
-  {
-    to: '/alerts',
-    label: 'Alerts',
-    section: 'WORKSPACE',
-    icon: BellRing,
-    description: 'Evidence-backed Rising, Live Moment, and VOD-ready alerts with voting.',
-  },
-  {
-    to: '/sources',
-    label: 'Sources',
-    section: 'WORKSPACE',
-    icon: Users,
-    description: 'Tracked YouTube, Twitch, and Kick creator channels.',
-  },
-  {
-    to: '/my-work',
-    label: 'My Work',
-    section: 'WORKSPACE',
-    icon: ClipboardCheck,
-    description: 'Active item & time-range claims with optimistic workflow transitions.',
-  },
-  {
-    to: '/notifications',
-    label: 'Notifications',
-    section: 'WORKSPACE',
-    icon: Bell,
-    description: 'Notification inbox, quiet hours, hourly budget, Discord, and Web Push.',
-  },
-  {
-    to: '/clip-log',
-    label: 'Clip Log',
-    section: 'WORKSPACE',
-    icon: Scissors,
-    description: 'Claimed moments, published clips, Our Channels, and manual vs API stats.',
-  },
-  {
-    to: '/reports',
-    label: 'Reports',
-    section: 'WORKSPACE',
-    icon: FileBarChart2,
-    description: 'Daily report, source ROI, and accuracy scorecard.',
-  },
-  {
-    to: '/settings',
-    label: 'Settings',
-    section: 'WORKSPACE',
-    icon: Settings,
-    description: 'Workspace members, JSON/CSV export, and atomic workspace deletion.',
+    label: 'Mission Control',
+    section: 'Command',
+    icon: LayoutDashboard,
+    description: 'KPI strip, Needs Attention queue, Live Now rail, and provider health.',
   },
   {
     to: '/live',
     label: 'Live Now',
-    section: 'LIVE MODULE',
+    section: 'Command',
     icon: Radio,
     description: 'Real-time live stream monitor and viewer/clip moment alerts.',
+  },
+  {
+    to: '/alerts',
+    label: 'Alerts',
+    section: 'Command',
+    icon: BellRing,
+    description: 'Evidence-backed Rising, Live Moment, and VOD-ready alerts.',
+  },
+  {
+    to: '/feed',
+    label: 'Feed',
+    section: 'Discover',
+    icon: Rss,
+    description: '3-lane creator upload & Shorts feed with saved views and drawer.',
+  },
+  {
+    to: '/rising',
+    label: 'Rising',
+    section: 'Discover',
+    icon: TrendingUp,
+    description: 'Velocity & engagement breakout detector with hysteresis.',
+  },
+  {
+    to: '/sources',
+    label: 'Creators',
+    section: 'Discover',
+    icon: Users,
+    description: 'Tracked YouTube, Twitch, and Kick creator channels.',
+  },
+  {
+    to: '/work',
+    label: 'Work Board',
+    section: 'Work',
+    icon: KanbanSquare,
+    description: 'Team Kanban board from Hot unclaimed through Published.',
+  },
+  {
+    to: '/my-work',
+    label: 'My Work',
+    section: 'Work',
+    icon: ClipboardCheck,
+    description: 'Filtered board of your claimed items and active edits.',
+  },
+  {
+    to: '/clip-log',
+    label: 'Clip Log',
+    section: 'Work',
+    icon: Scissors,
+    description: 'Published clips, Our Channels, and manual vs API stats.',
+  },
+  {
+    to: '/reports',
+    label: 'Reports',
+    section: 'Insights',
+    icon: FileBarChart2,
+    description: 'Daily report, source ROI, and accuracy scorecard.',
+  },
+  {
+    to: '/notifications',
+    label: 'Notifications',
+    section: 'Admin',
+    icon: Bell,
+    description: 'Notification inbox, quiet hours, hourly budget, Discord, and Web Push.',
+  },
+  {
+    to: '/settings',
+    label: 'Settings',
+    section: 'Admin',
+    icon: Settings,
+    description: 'Integrations, members, Our Channels, export, and security.',
   },
 ];

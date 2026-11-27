@@ -86,6 +86,18 @@ export function extractApiErrorMessage(payload: unknown, fallback: string): stri
   if (typeof errVal === 'string' && errVal.length > 0) return errVal;
   const errRec = asRecord(errVal);
   const nestedMsg = asString(errRec?.['message']);
+  const details = asRecord(errRec?.['details']);
+  if (details) {
+    const email = asString(details['claimerEmail']);
+    const startSec = typeof details['startSec'] === 'number' ? details['startSec'] : null;
+    const endSec = typeof details['endSec'] === 'number' ? details['endSec'] : null;
+    if (email && startSec !== null && endSec !== null) {
+      return `${nestedMsg ?? 'Claim overlaps'} (${email}, ${startSec}s–${endSec}s)`;
+    }
+    if (email) {
+      return `${nestedMsg ?? 'Already claimed'} (by ${email})`;
+    }
+  }
   if (nestedMsg) return nestedMsg;
   return asString(rec['message']) ?? fallback;
 }

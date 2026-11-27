@@ -1,29 +1,51 @@
 import { Link, useRouterState } from '@tanstack/react-router';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useState } from 'react';
 import type { HealthSnapshot } from '../../lib/api';
-import { NAV_ITEMS, type NavItem, type NavSection } from './nav';
+import { NAV_ITEMS, NAV_SECTIONS, type NavItem } from './nav';
 
 interface SidebarProps {
   health: HealthSnapshot | undefined;
   liveCount: number;
 }
 
-const SECTIONS: NavSection[] = ['WORKSPACE', 'LIVE MODULE'];
-
-function BrandMark() {
+function BrandMark({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <div className="flex h-12 items-center gap-2.5 border-b border-[var(--divider)] px-4">
-      <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--accent-tint)] text-[var(--accent)]">
-        <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-          <rect x="3" y="3" width="14" height="14" rx="4" stroke="currentColor" strokeWidth="1.8" />
-          <circle cx="10" cy="10" r="2.5" fill="currentColor" />
-        </svg>
-      </div>
-      <span className="text-[13px] font-semibold tracking-tight text-[var(--text-strong)]">
-        clipse
-      </span>
-      <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-        radar
-      </span>
+    <div className="flex h-12 items-center justify-between border-b border-[var(--divider)] px-3">
+      {!collapsed && (
+        <div className="flex items-center gap-2 pl-1">
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--accent-tint)] text-[var(--accent)]">
+            <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+              <rect x="3" y="3" width="14" height="14" rx="4" stroke="currentColor" strokeWidth="1.8" />
+              <circle cx="10" cy="10" r="2.5" fill="currentColor" />
+            </svg>
+          </div>
+          <span className="text-[13px] font-semibold tracking-tight text-[var(--text-strong)]">
+            clipse
+          </span>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+            radar
+          </span>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+      >
+        {collapsed ? (
+          <PanelLeftOpen className="h-4 w-4" strokeWidth={1.5} />
+        ) : (
+          <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />
+        )}
+      </button>
     </div>
   );
 }
@@ -31,10 +53,12 @@ function BrandMark() {
 function SidebarLink({
   item,
   active,
+  collapsed,
   liveCount,
 }: {
   item: NavItem;
   active: boolean;
+  collapsed: boolean;
   liveCount: number;
 }) {
   const Icon = item.icon;
@@ -43,7 +67,10 @@ function SidebarLink({
   return (
     <Link
       to={item.to}
-      className={`flex min-h-[44px] items-center justify-between rounded-lg px-3 text-[13px] font-medium transition-colors ${
+      title={collapsed ? item.label : undefined}
+      className={`flex min-h-[40px] items-center rounded-lg px-2.5 text-[13px] font-medium transition-colors ${
+        collapsed ? 'justify-center' : 'justify-between'
+      } ${
         active
           ? 'bg-[var(--accent-tint)] text-[var(--text-strong)]'
           : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
@@ -56,15 +83,12 @@ function SidebarLink({
           style={{ color: active ? 'var(--accent)' : 'currentColor' }}
           aria-hidden="true"
         />
-        <span>{item.label}</span>
+        {!collapsed && <span>{item.label}</span>}
       </span>
-      {showLivePill && (
+      {!collapsed && showLivePill && (
         <span
           className="rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wider"
-          style={{
-            backgroundColor: 'var(--danger-bg)',
-            color: 'var(--danger)',
-          }}
+          style={{ backgroundColor: 'var(--danger-bg)', color: 'var(--danger)' }}
         >
           LIVE {liveCount}
         </span>
@@ -81,6 +105,7 @@ function formatBuildStamp(iso: string | undefined): string {
 }
 
 export function Sidebar({ health, liveCount }: SidebarProps) {
+  const [collapsed, setCollapsed] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const gitSha = import.meta.env.VITE_GIT_SHA ?? 'dev';
   const buildTime = formatBuildStamp(import.meta.env.VITE_BUILD_TIME);
@@ -88,23 +113,28 @@ export function Sidebar({ health, liveCount }: SidebarProps) {
   return (
     <aside
       aria-label="Primary navigation"
-      className="hidden w-[232px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)] md:flex"
+      className={`hidden shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)] transition-[width] duration-150 md:flex ${
+        collapsed ? 'w-[64px]' : 'w-[232px]'
+      }`}
     >
-      <BrandMark />
-      <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 py-4">
-        {SECTIONS.map((section) => {
+      <BrandMark collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
+        {NAV_SECTIONS.map((section) => {
           const items = NAV_ITEMS.filter((item) => item.section === section);
           return (
             <div key={section}>
-              <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                {section}
-              </div>
+              {!collapsed && (
+                <div className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {section}
+                </div>
+              )}
               <div className="space-y-0.5">
                 {items.map((item) => (
                   <SidebarLink
                     key={item.to}
                     item={item}
                     active={pathname === item.to}
+                    collapsed={collapsed}
                     liveCount={liveCount}
                   />
                 ))}
@@ -113,22 +143,24 @@ export function Sidebar({ health, liveCount }: SidebarProps) {
           );
         })}
       </nav>
-      <div className="border-t border-[var(--divider)] px-4 py-3 text-[11px] text-[var(--text-muted)]">
-        <div className="flex items-center justify-between">
-          <span>Environment</span>
-          <span className="font-mono text-[var(--text-secondary)]">
-            {health?.environment ?? 'unknown'}
-          </span>
+      {!collapsed && (
+        <div className="border-t border-[var(--divider)] px-4 py-3 text-[11px] text-[var(--text-muted)]">
+          <div className="flex items-center justify-between">
+            <span>Environment</span>
+            <span className="font-mono text-[var(--text-secondary)]">
+              {health?.environment ?? 'unknown'}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span>Commit</span>
+            <span className="font-mono text-[var(--text-secondary)]">{gitSha}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span>Built</span>
+            <span className="font-mono text-[10px] text-[var(--text-secondary)]">{buildTime}</span>
+          </div>
         </div>
-        <div className="mt-1 flex items-center justify-between">
-          <span>Commit</span>
-          <span className="font-mono text-[var(--text-secondary)]">{gitSha}</span>
-        </div>
-        <div className="mt-1 flex items-center justify-between">
-          <span>Built</span>
-          <span className="font-mono text-[10px] text-[var(--text-secondary)]">{buildTime}</span>
-        </div>
-      </div>
+      )}
     </aside>
   );
 }

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { ApiError, createClaim } from '../../lib/api-v1';
+import { parseMmSsToSec } from '../../lib/url';
 
 interface ClaimModalProps {
   itemId: string;
@@ -12,8 +13,8 @@ interface ClaimModalProps {
 export function ClaimModal({ itemId, itemTitle, onClose }: ClaimModalProps) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<'whole' | 'range'>('whole');
-  const [startSec, setStartSec] = useState('0');
-  const [endSec, setEndSec] = useState('60');
+  const [startInput, setStartInput] = useState('0:00');
+  const [endInput, setEndInput] = useState('1:00');
   const [note, setNote] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -21,7 +22,10 @@ export function ClaimModal({ itemId, itemTitle, onClose }: ClaimModalProps) {
     mutationFn: createClaim,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['claims'] });
+      void queryClient.invalidateQueries({ queryKey: ['work-board'] });
       void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      void queryClient.invalidateQueries({ queryKey: ['rising'] });
+      void queryClient.invalidateQueries({ queryKey: ['mission-control'] });
       onClose();
     },
     onError: (err) => {
@@ -39,10 +43,10 @@ export function ClaimModal({ itemId, itemTitle, onClose }: ClaimModalProps) {
     e.preventDefault();
     setErrorMsg(null);
     if (mode === 'range') {
-      const s = Number(startSec);
-      const en = Number(endSec);
-      if (!Number.isInteger(s) || s < 0 || !Number.isInteger(en) || en <= s) {
-        setErrorMsg('End second must be an integer greater than start second.');
+      const s = parseMmSsToSec(startInput);
+      const en = parseMmSsToSec(endInput);
+      if (s === null || en === null || en <= s) {
+        setErrorMsg('Use mm:ss or seconds where end is greater than start (e.g. 0:45 – 1:30).');
         return;
       }
       mutation.mutate({
@@ -111,30 +115,30 @@ export function ClaimModal({ itemId, itemTitle, onClose }: ClaimModalProps) {
                   : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)]'
               }`}
             >
-              Time Range (sec)
+              Range (mm:ss)
             </button>
           </div>
 
           {mode === 'range' && (
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-[12px] text-[var(--text-secondary)]">
-                Start (sec)
+                Start (mm:ss or sec)
                 <input
-                  type="number"
-                  min={0}
-                  value={startSec}
-                  onChange={(e) => setStartSec(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2 text-[13px] text-[var(--text-primary)]"
+                  type="text"
+                  value={startInput}
+                  onChange={(e) => setStartInput(e.target.value)}
+                  placeholder="0:30"
+                  className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2 font-mono text-[13px] text-[var(--text-primary)]"
                 />
               </label>
               <label className="block text-[12px] text-[var(--text-secondary)]">
-                End (sec)
+                End (mm:ss or sec)
                 <input
-                  type="number"
-                  min={1}
-                  value={endSec}
-                  onChange={(e) => setEndSec(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2 text-[13px] text-[var(--text-primary)]"
+                  type="text"
+                  value={endInput}
+                  onChange={(e) => setEndInput(e.target.value)}
+                  placeholder="1:45"
+                  className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 py-2 font-mono text-[13px] text-[var(--text-primary)]"
                 />
               </label>
             </div>

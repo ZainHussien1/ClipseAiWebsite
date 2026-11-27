@@ -1,9 +1,14 @@
 export type Platform = 'youtube' | 'twitch' | 'kick';
 export type ClipPlatform = Platform | 'tiktok' | 'instagram' | 'x';
 export type ItemKind = 'video' | 'short' | 'live' | 'vod' | 'clip';
+export type ShortsClassification = 'video' | 'short' | 'live' | 'unclassified';
 export type RisingTier = 'none' | 'rising' | 'breakout' | 'viral';
 export type ActiveRisingTier = Exclude<RisingTier, 'none'>;
-export type ClaimStatus = 'New' | 'Claimed' | 'Clipped' | 'Skipped';
+export type ClaimStatus = 'New' | 'Claimed' | 'Clipping' | 'Clipped' | 'Published' | 'Skipped';
+
+export type FeedLane = 'videos' | 'shorts' | 'live' | 'unclassified';
+export type FeedSort = 'newest' | 'rising' | 'views';
+export type FeedAge = '6h' | '24h' | '72h' | '7d';
 
 export type AlertType = 'rising' | 'breakout' | 'viral' | 'live_moment' | 'vod_ready';
 export type AlertConfidence = 'low' | 'medium' | 'high';
@@ -53,29 +58,91 @@ export interface FeedItem {
   platform: Platform;
   externalId: string;
   kind: ItemKind;
+  shortsClassification: ShortsClassification | null;
   title: string;
   url: string;
   thumbnailUrl: string | null;
   publishedAt: string;
   firstSeenAt: string;
+  dayGroup: string;
   isBackfill: boolean;
+  isSeen: boolean;
   durationSec: number | null;
   ingestLatencyMs: number | null;
   latestViews: number | null;
   latestLikes: number | null;
   latestComments: number | null;
   snapshotCount: number;
+  risingScore: number | null;
+  risingTier: ActiveRisingTier | null;
+  risingReason: string | null;
   claimStatus: ClaimStatus | null;
   claim: ItemClaimInfo | null;
   source: string;
   ageSeconds: number;
 }
 
+export interface FeedCreatorRailItem {
+  accountId: string;
+  handle: string;
+  displayName: string;
+  platform: Platform;
+  unseenCount: number;
+  starred: boolean;
+}
+
+export interface LaneCounts {
+  videos: number;
+  shorts: number;
+  live: number;
+  unclassified: number;
+}
+
 export interface FeedResponse {
   items: FeedItem[];
   nextCursor: string | null;
+  laneCounts: LaneCounts;
+  creatorsRail: FeedCreatorRailItem[];
   source: string;
   asOf: string;
+}
+
+export interface ItemDetail {
+  item: FeedItem;
+  snapshots: Array<{
+    capturedAt: string;
+    views: number;
+    likes: number | null;
+    comments: number | null;
+  }>;
+  claims: ClaimRecord[];
+  alerts: Array<{
+    id: string;
+    type: string;
+    confidence: string;
+    score: number;
+    reason: string;
+    createdAt: string;
+  }>;
+}
+
+export interface SavedViewFilters {
+  platform?: Platform;
+  lane?: FeedLane;
+  sort?: FeedSort;
+  age?: FeedAge;
+  minViews?: number;
+  starredOnly?: boolean;
+  unseenOnly?: boolean;
+  accountId?: string;
+  q?: string;
+}
+
+export interface SavedViewRecord {
+  id: string;
+  name: string;
+  filters: SavedViewFilters;
+  createdAt: string;
 }
 
 export interface LiveStream {
@@ -142,8 +209,91 @@ export interface ClaimRecord {
   endSec: number | null;
   status: ClaimStatus;
   note: string | null;
+  clipUrl?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WorkBoardClaim extends ClaimRecord {
+  title: string;
+  thumbnailUrl: string | null;
+  creatorName: string;
+  creatorHandle: string;
+  platform: Platform;
+  url: string;
+  claimerEmail: string | null;
+  clipUrl: string | null;
+}
+
+export interface HotUnclaimedItem {
+  alertId: string;
+  itemId: string;
+  title: string;
+  thumbnailUrl: string | null;
+  creatorName: string;
+  creatorHandle: string;
+  platform: Platform;
+  url: string;
+  tier: ActiveRisingTier | 'live_moment' | 'vod_ready';
+  score: number;
+  reason: string;
+  createdAt: string;
+}
+
+export interface WorkBoardResponse {
+  claims: WorkBoardClaim[];
+  hotUnclaimed: HotUnclaimedItem[];
+  statuses: ClaimStatus[];
+  source: string;
+  asOf: string;
+}
+
+export interface MissionControlData {
+  hasSources: boolean;
+  hasItems: boolean;
+  kpis: {
+    newItems24h: {
+      total: number;
+      videos: number;
+      shorts: number;
+      live: number;
+    };
+    liveNowCount: number;
+    hotUnclaimedCount: number;
+    claimsInProgressCount: number;
+    clipsTodayCount: number;
+    medianTimeToAlertMs7d: number | null;
+  };
+  needsAttention: Array<{
+    kind: 'unclaimed_alert' | 'stale_claim';
+    alertId: string | null;
+    claimId: string | null;
+    itemId: string;
+    title: string;
+    creatorName: string;
+    platform: Platform;
+    reason: string;
+    score: number | null;
+    ageSeconds: number;
+  }>;
+  liveNowRail: LiveStream[];
+  risingTop5: RisingItem[];
+  teamActivity: Array<{
+    id: string;
+    actorEmail: string | null;
+    action: string;
+    targetType: string;
+    targetId: string;
+    summary: string;
+    createdAt: string;
+  }>;
+  providerHealth: {
+    youtube: { status: string; label: string };
+    twitch: { status: string; label: string };
+    kick: { status: string; label: string };
+    lastIngestAt: string | null;
+  };
+  asOf: string;
 }
 
 export interface AlertItem {

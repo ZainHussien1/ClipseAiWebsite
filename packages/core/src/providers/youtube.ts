@@ -303,13 +303,7 @@ export class YouTubeProvider implements Provider {
           entry.snippet.thumbnails?.high?.url ?? entry.snippet.thumbnails?.medium?.url,
         publishedAt: entry.snippet.publishedAt,
         durationSec: durationSec ?? undefined,
-        shortsClassification: isLive
-          ? 'live'
-          : shortCheck.isShort
-            ? 'short'
-            : durationSec !== null
-              ? 'video'
-              : 'unclassified',
+        shortsClassification: isLive ? 'live' : shortCheck.classification,
       };
     });
   }

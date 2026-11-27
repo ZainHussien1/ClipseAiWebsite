@@ -2,7 +2,7 @@ import { createRootRoute, createRoute, createRouter } from '@tanstack/react-rout
 import { Suspense, lazy, type ComponentType } from 'react';
 import { AppShell } from './components/shell/AppShell';
 import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
-import { OverviewPage } from './routes/OverviewPage';
+import { MissionControlPage } from './routes/MissionControlPage';
 
 const SourcesPage = lazy(() =>
   import('./routes/SourcesPage').then((m) => ({ default: m.SourcesPage })),
@@ -19,8 +19,13 @@ const RisingPage = lazy(() =>
 const AlertsPage = lazy(() =>
   import('./routes/AlertsPage').then((m) => ({ default: m.AlertsPage })),
 );
-const MyWorkPage = lazy(() =>
-  import('./routes/MyWorkPage').then((m) => ({ default: m.MyWorkPage })),
+const WorkBoardPage = lazy(() =>
+  import('./routes/WorkBoardPage').then((m) => ({ default: m.WorkBoardPage })),
+);
+const MyWorkFilteredPage = lazy(() =>
+  import('./routes/WorkBoardPage').then((m) => ({
+    default: () => <m.WorkBoardPage mineOnly />,
+  })),
 );
 const NotificationsPage = lazy(() =>
   import('./routes/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
@@ -63,8 +68,8 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   component: () => (
-    <RouteErrorBoundary routeName="Overview">
-      <OverviewPage />
+    <RouteErrorBoundary routeName="Mission Control">
+      <MissionControlPage />
     </RouteErrorBoundary>
   ),
 });
@@ -96,13 +101,19 @@ const alertsRoute = createRoute({
 const sourcesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sources',
-  component: () => <LazyRoute name="Sources" Component={SourcesPage} />,
+  component: () => <LazyRoute name="Creators" Component={SourcesPage} />,
+});
+
+const workRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/work',
+  component: () => <LazyRoute name="Work Board" Component={WorkBoardPage} />,
 });
 
 const myWorkRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/my-work',
-  component: () => <LazyRoute name="My Work" Component={MyWorkPage} />,
+  component: () => <LazyRoute name="My Work" Component={MyWorkFilteredPage} />,
 });
 
 const notificationsRoute = createRoute({
@@ -142,6 +153,7 @@ const routeTree = rootRoute.addChildren([
   risingRoute,
   alertsRoute,
   sourcesRoute,
+  workRoute,
   myWorkRoute,
   notificationsRoute,
   clipLogRoute,
