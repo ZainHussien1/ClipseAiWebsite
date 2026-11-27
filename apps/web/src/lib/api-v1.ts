@@ -1,19 +1,25 @@
 import { extractApiErrorMessage } from './api';
 import type {
   ActiveRisingTier,
+  AdminHealthData,
   AlertDeliveryRecord,
   AlertItem,
+  AuditLogResponse,
   ClaimRecord,
   ClaimStatus,
   ClipPlatform,
   ClipRecord,
+  CreatorDetail,
+  CreatorsListResponse,
   DailyReportData,
+  DataQualityReport,
   FeedAge,
   FeedLane,
   FeedResponse,
   FeedSort,
   IntegrationVerifyResponse,
   IntegrationsResponse,
+  InviteMemberResponse,
   ItemDetail,
   ItemKind,
   LiveResponse,
@@ -28,7 +34,10 @@ import type {
   SavedViewRecord,
   ScorecardData,
   SourceItem,
+  SourceItemPickerEntry,
+  SourceRule,
   SourceRoiEntry,
+  WeeklyReportData,
   WorkBoardResponse,
   WorkspaceMember,
   WorkspaceRole,
@@ -121,7 +130,14 @@ export async function bulkCreateSources(input: {
 
 export async function updateSource(
   followId: string,
-  patch: { starred?: boolean; paused?: boolean; archived?: boolean; groupName?: string | null },
+  patch: {
+    starred?: boolean;
+    paused?: boolean;
+    archived?: boolean;
+    isOwn?: boolean;
+    groupName?: string | null;
+    rules?: Partial<SourceRule>;
+  },
 ): Promise<SourceItem> {
   return requestJson<SourceItem>(`/api/v1/sources/${encodeURIComponent(followId)}`, {
     method: 'PATCH',
@@ -373,12 +389,18 @@ export async function updateDiscordWebhook(
   });
 }
 
-export async function listClips(): Promise<ClipRecord[]> {
-  const data = await requestJson<{ clips?: ClipRecord[]; items?: ClipRecord[] } | ClipRecord[]>(
-    '/api/v1/clips',
-  );
-  if (Array.isArray(data)) return data;
-  return data.clips ?? data.items ?? [];
+export async function listClips(): Promise<{
+  clips: ClipRecord[];
+  sourceItems: SourceItemPickerEntry[];
+}> {
+  const data = await requestJson<
+    { clips?: ClipRecord[]; items?: ClipRecord[]; sourceItems?: SourceItemPickerEntry[] } | ClipRecord[]
+  >('/api/v1/clips');
+  if (Array.isArray(data)) return { clips: data, sourceItems: [] };
+  return {
+    clips: data.clips ?? data.items ?? [],
+    sourceItems: data.sourceItems ?? [],
+  };
 }
 
 export async function createClip(input: {
@@ -388,6 +410,10 @@ export async function createClip(input: {
   description?: string;
   sourceItemId?: string;
   manualStats?: { views: number; likes?: number; comments?: number };
+  manualRevenueCents?: number;
+  publishTime?: string;
+  startSec?: number;
+  endSec?: number;
 }): Promise<ClipRecord> {
   return requestJson<ClipRecord>('/api/v1/clips', {
     method: 'POST',
@@ -417,9 +443,16 @@ export async function fetchScorecard(): Promise<ScorecardData> {
   return requestJson<ScorecardData>('/api/v1/admin/scorecard');
 }
 
-export async function fetchDailyReport(date?: string): Promise<DailyReportData> {
-  const qs = date ? `?date=${encodeURIComponent(date)}` : '';
-  return requestJson<DailyReportData>(`/api/v1/reports/daily${qs}`);
+export async function fetchDailyReport(date?: string, ai = false): Promise<DailyReportData> {
+  const qs = new URLSearchParams();
+  if (date) qs.set('date', date);
+  if (ai) qs.set('ai', 'true');
+  const query = qs.toString();
+  return requestJson<DailyReportData>(`/api/v1/reports/daily${query ? `?${query}` : ''}`);
+}
+
+export async function fetchWeeklyReport(): Promise<WeeklyReportData> {
+  return requestJson<WeeklyReportData>('/api/v1/reports/weekly');
 }
 
 export async function listMembers(): Promise<WorkspaceMember[]> {
@@ -476,4 +509,66 @@ export async function verifyAdminIntegration(
     `/api/v1/admin/integrations/${encodeURIComponent(platform)}/verify`,
     { method: 'POST' },
   );
+}
+
+export async function fetchCreators(): Promise<CreatorsListResponse> {
+  return requestJson<CreatorsListResponse>('/api/v1/creators');
+}
+
+export async function fetchCreatorDetail(accountId: string): Promise<CreatorDetail> {
+  return requestJson<CreatorDetail>(`/api/v1/creators/${encodeURIComponent(accountId)}`);
+}
+
+export async function updateCreatorNotes(
+  accountId: string,
+  body: string,
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(
+    `/api/v1/creators/${encodeURIComponent(accountId)}/notes`,
+    { method: 'PUT', body: JSON.stringify({ body }) },
+  );
+}
+
+export async function inviteMember(input: {
+  email: string;
+  role: WorkspaceRole;
+  temporaryPassphrase: string;
+}): Promise<InviteMemberResponse> {
+  return requestJson<InviteMemberResponse>('/api/v1/settings/members/invite', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchAdminHealth(): Promise<AdminHealthData> {
+  return requestJson<AdminHealthData>('/api/v1/admin/health');
+}
+
+export async function retryAdminDlq(input: {
+  id?: string;
+  queueName?: 'ingest-dlq' | 'notify-dlq';
+}): Promise<{ ok: boolean; retriedCount: number; remainingPending: number }> {
+  return requestJson('/api/v1/admin/dlq/retry', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchAuditLog(params: {
+  action?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+}): Promise<AuditLogResponse> {
+  const qs = new URLSearchParams();
+  if (params.action) qs.set('action', params.action);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.limit) qs.set('limit', String(params.limit));
+  const q = qs.toString();
+  return requestJson<AuditLogResponse>(`/api/v1/admin/audit-log${q ? `?${q}` : ''}`);
+}
+
+export async function fetchDataQuality(): Promise<DataQualityReport> {
+  return requestJson<DataQualityReport>('/api/v1/admin/data-quality');
 }

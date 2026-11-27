@@ -7,6 +7,9 @@ import { MissionControlPage } from './routes/MissionControlPage';
 const SourcesPage = lazy(() =>
   import('./routes/SourcesPage').then((m) => ({ default: m.SourcesPage })),
 );
+const CreatorsPage = lazy(() =>
+  import('./routes/CreatorsPage').then((m) => ({ default: m.CreatorsPage })),
+);
 const FeedPage = lazy(() =>
   import('./routes/FeedPage').then((m) => ({ default: m.FeedPage })),
 );
@@ -98,10 +101,37 @@ const alertsRoute = createRoute({
   component: () => <LazyRoute name="Alerts" Component={AlertsPage} />,
 });
 
+const creatorsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/creators',
+  component: () => <LazyRoute name="Creators" Component={CreatorsPage} />,
+});
+
+const creatorDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/creators/$accountId',
+  component: function CreatorDetailRouteComponent() {
+    const { accountId } = creatorDetailRoute.useParams();
+    return (
+      <RouteErrorBoundary routeName="Creator Detail">
+        <Suspense
+          fallback={
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-[12px] text-[var(--text-secondary)]">
+              Loading Creator...
+            </div>
+          }
+        >
+          <CreatorsPage accountId={accountId} />
+        </Suspense>
+      </RouteErrorBoundary>
+    );
+  },
+});
+
 const sourcesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sources',
-  component: () => <LazyRoute name="Creators" Component={SourcesPage} />,
+  component: () => <LazyRoute name="Sources" Component={SourcesPage} />,
 });
 
 const workRoute = createRoute({
@@ -152,6 +182,8 @@ const routeTree = rootRoute.addChildren([
   liveRoute,
   risingRoute,
   alertsRoute,
+  creatorsRoute,
+  creatorDetailRoute,
   sourcesRoute,
   workRoute,
   myWorkRoute,

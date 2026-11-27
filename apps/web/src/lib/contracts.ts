@@ -410,7 +410,22 @@ export interface ClipRecord {
   likes: number | null;
   comments: number | null;
   statsCapturedAt: string | null;
+  manualRevenueCents?: number | null;
+  revenueSource?: 'manual' | null;
+  publishTime?: string | null;
+  sourceItemTitle?: string | null;
+  sourceCreatorName?: string | null;
   createdAt: string;
+}
+
+export interface SourceItemPickerEntry {
+  itemId: string;
+  title: string;
+  creatorName: string;
+  creatorHandle: string;
+  platform: Platform;
+  url: string;
+  publishedAt: string;
 }
 
 export interface SourceRoiEntry {
@@ -456,16 +471,52 @@ export interface DailyReportMember {
   clipsLoggedCount: number;
 }
 
+export type AiNarrativeStatus =
+  | 'off'
+  | 'used'
+  | 'fallback_no_key'
+  | 'fallback_disabled'
+  | 'fallback_ungrounded'
+  | 'fallback_error';
+
 export interface DailyReportData {
   date: string;
   timezone: string;
   aiInsightsUsed: boolean;
+  aiStatus?: AiNarrativeStatus;
+  narrative?: string;
+  fallbackReason?: string | null;
   teamSummary: {
     alertsCount: number;
     claimsCount: number;
     clippedCount: number;
     clipsLoggedCount: number;
   };
+  members: DailyReportMember[];
+  source: string;
+  asOf: string;
+}
+
+export interface WeeklyReportDay {
+  date: string;
+  alertsCount: number;
+  claimsCount: number;
+  clippedCount: number;
+  clipsLoggedCount: number;
+}
+
+export interface WeeklyReportData {
+  startDate: string;
+  endDate: string;
+  timezone: string;
+  teamSummary: {
+    alertsCount: number;
+    claimsCount: number;
+    clippedCount: number;
+    clipsLoggedCount: number;
+    manualRevenueCents: number;
+  };
+  days: WeeklyReportDay[];
   members: DailyReportMember[];
   source: string;
   asOf: string;
@@ -514,4 +565,230 @@ export interface IntegrationVerifyResponse {
   status: IntegrationStatus;
   message: string;
   checkedAt: string;
+}
+
+export interface CreatorBaseline {
+  kind: ItemKind;
+  medianViews: number | null;
+  sampleSize: number;
+  requiredSamples: number;
+  status: 'ready' | 'collecting';
+}
+
+export interface CreatorHeatmapBucket {
+  dayOfWeek: number;
+  hourUtc: number;
+  count: number;
+}
+
+export interface CreatorCadence {
+  observedEvents: number;
+  sampleFloor: number;
+  ready: boolean;
+  summaryLabel: string;
+  avgPerWeek: number | null;
+  heatmap: CreatorHeatmapBucket[];
+}
+
+export interface CreatorTeamRoi {
+  claimsCount: number;
+  clipsCount: number;
+  hitRate: number | null;
+  medianClipViews: number | null;
+  medianTimeToClipMs: number | null;
+  totalManualRevenueCents: number;
+  sampleFloor: number;
+}
+
+export interface CreatorSubscriptionHealth {
+  topic: string;
+  status: 'pending' | 'active' | 'revoked' | 'expired' | 'none';
+  leaseExpiresAt: string | null;
+}
+
+export interface CreatorLaneItem {
+  id: string;
+  accountId: string;
+  accountHandle: string;
+  accountDisplayName: string;
+  platform: Platform;
+  externalId: string;
+  kind: ItemKind;
+  shortsClassification: ShortsClassification | null;
+  title: string;
+  url: string;
+  thumbnailUrl: string | null;
+  publishedAt: string;
+  firstSeenAt: string;
+  isBackfill: boolean;
+  durationSec: number | null;
+  latestViews: number | null;
+  latestLikes: number | null;
+  latestComments: number | null;
+  risingScore: number | null;
+  risingTier: ActiveRisingTier | null;
+  risingReason: string | null;
+  claimStatus: string | null;
+  source: string;
+  ageSeconds: number;
+}
+
+export interface CreatorSummary {
+  followId: string;
+  accountId: string;
+  platform: Platform;
+  externalId: string;
+  handle: string;
+  displayName: string;
+  avatarUrl: string | null;
+  starred: boolean;
+  isOwn: boolean;
+  paused: boolean;
+  archived: boolean;
+  groupName: string | null;
+  tags: string[];
+  rules: SourceRule;
+  lastSyncedAt: string | null;
+  laneCounts: LaneCounts;
+  baselines: CreatorBaseline[];
+  observedEvents: number;
+  cadenceSummary: string;
+  notesPreview: string | null;
+  subscriptionHealth: CreatorSubscriptionHealth;
+  teamRoi: CreatorTeamRoi;
+}
+
+export interface CreatorsListResponse {
+  creators: CreatorSummary[];
+  source: string;
+  asOf: string;
+}
+
+export interface CreatorDetail {
+  creator: CreatorSummary;
+  itemsByLane: {
+    videos: CreatorLaneItem[];
+    shorts: CreatorLaneItem[];
+    live: CreatorLaneItem[];
+    unclassified: CreatorLaneItem[];
+  };
+  cadence: CreatorCadence;
+  notes: {
+    body: string;
+    updatedAt: string | null;
+    updatedByEmail: string | null;
+  };
+  source: string;
+  asOf: string;
+}
+
+export interface InviteMemberResponse {
+  ok: boolean;
+  message: string;
+  maxSeats: number;
+  seatsUsed: number;
+}
+
+export interface DlqItem {
+  id: string;
+  queueName: 'ingest-dlq' | 'notify-dlq';
+  errorReason: string;
+  status: 'pending' | 'retried' | 'discarded';
+  attempts: number;
+  createdAt: string;
+  retriedAt: string | null;
+}
+
+export interface AdminHealthData {
+  d1: {
+    readsTodayEstimate: number;
+    writesTodayEstimate: number;
+    dailyReadLimit: number;
+    dailyWriteLimit: number;
+    degraded: boolean;
+  };
+  queues: {
+    ingestQueueDepth: number;
+    notifyQueueDepth: number;
+    ingestDlqCount: number;
+    notifyDlqCount: number;
+    dlqItems: DlqItem[];
+  };
+  cron: {
+    lastRunAt: string | null;
+    lastSyncAt: string | null;
+    reconcileRunsToday: number;
+  };
+  delivery: {
+    deliveredCount: number;
+    failedCount: number;
+    suppressedCount: number;
+    successRate: number | null;
+    recentErrors: Array<{
+      id: string;
+      channel: string;
+      reason: string | null;
+      attemptedAt: string;
+    }>;
+  };
+  source: string;
+  asOf: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorUserId: string;
+  actorEmail: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AuditLogResponse {
+  entries: AuditLogEntry[];
+  source: string;
+  asOf: string;
+}
+
+export interface DataQualityReport {
+  counts: {
+    missingDuration: number;
+    unclassifiedShorts: number;
+    staleSources: number;
+    orphanClaims: number;
+  };
+  missingDuration: Array<{
+    itemId: string;
+    title: string;
+    creatorName: string;
+    platform: Platform;
+    publishedAt: string;
+  }>;
+  unclassifiedShorts: Array<{
+    itemId: string;
+    title: string;
+    creatorName: string;
+    platform: Platform;
+    publishedAt: string;
+  }>;
+  staleSources: Array<{
+    followId: string;
+    accountId: string;
+    displayName: string;
+    handle: string;
+    platform: Platform;
+    lastSyncedAt: string | null;
+  }>;
+  orphanClaims: Array<{
+    claimId: string;
+    itemId: string;
+    title: string;
+    status: string;
+    userId: string;
+    createdAt: string;
+  }>;
+  source: string;
+  asOf: string;
 }

@@ -89,6 +89,7 @@ describe('Phase 5 routes (clips, ROI, scorecard, daily report, export, settings)
       '0006_v2_upgrade.sql',
       '0007_v3_board.sql',
       '0008_v4_alerts.sql',
+      '0009_v5_creators.sql',
     ]) {
       sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
     }

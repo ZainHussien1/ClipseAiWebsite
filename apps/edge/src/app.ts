@@ -16,10 +16,12 @@ import {
   createTwitchHooksRouter,
   createYouTubeHooksRouter,
 } from './hooks/index.js';
+import { createAdminRouter } from './routes/admin.js';
 import { createAlertsRouter } from './routes/alerts.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createClaimsRouter } from './routes/claims.js';
 import { createClipsRouter } from './routes/clips.js';
+import { createCreatorsRouter } from './routes/creators.js';
 import { createFeedRouter } from './routes/feed.js';
 import {
   createAdminIntegrationsRouter,
@@ -70,10 +72,12 @@ export interface EdgeBindings {
   DB: D1Database;
   WORKSPACE_DO: DurableObjectNamespace<WorkspaceDO>;
   INGEST_QUEUE?: Queue<IngestQueueMessage>;
+  NOTIFY_QUEUE?: Queue<unknown>;
   ENGINE?: EngineServiceBinding;
   ASSETS?: Fetcher;
   ENVIRONMENT?: string;
   AI_INSIGHTS_ENABLED?: string;
+  AI_GATEWAY_URL?: string;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
   SESSION_SECRET?: string;
@@ -253,6 +257,8 @@ export function createApp(deps: AppDependencies = {}) {
   app.use('/api/v1/notifications/*', authMiddleware);
   app.use('/api/v1/clips', authMiddleware);
   app.use('/api/v1/clips/*', authMiddleware);
+  app.use('/api/v1/creators', authMiddleware);
+  app.use('/api/v1/creators/*', authMiddleware);
   app.use('/api/v1/roi', authMiddleware);
   app.use('/api/v1/admin/*', authMiddleware);
   app.use('/api/v1/reports/*', authMiddleware);
@@ -271,7 +277,9 @@ export function createApp(deps: AppDependencies = {}) {
   app.route('/api/v1/alerts', createAlertsRouter());
   app.route('/api/v1/notifications', createNotificationsRouter());
   app.route('/api/v1/clips', createClipsRouter());
+  app.route('/api/v1/creators', createCreatorsRouter());
   app.route('/api/v1/admin/integrations', createAdminIntegrationsRouter());
+  app.route('/api/v1/admin', createAdminRouter());
   app.route('/api/v1', createReportsRouter());
   app.route('/api/v1', createSettingsRouter());
 

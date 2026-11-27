@@ -1,11 +1,14 @@
 import { Hono } from 'hono';
 import {
   AppError,
+  formatDeterministicDailyNarrative,
+  GeminiInsightsProvider,
   hasRoleAtLeast,
   type DailyReportData,
   type Platform,
   type ScorecardData,
   type SourceRoiEntry,
+  type WeeklyReportData,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
 
@@ -23,6 +26,23 @@ function formatDateInTimezone(date: Date, timeZone: string): string {
   } catch {
     return date.toISOString().slice(0, 10);
   }
+}
+
+function enumerateLast7Days(endDateYmd: string): string[] {
+  const parsed = new Date(`${endDateYmd}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    const fallback = new Date();
+    const out: string[] = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      out.push(new Date(fallback.getTime() - i * 86_400_000).toISOString().slice(0, 10));
+    }
+    return out;
+  }
+  const out: string[] = [];
+  for (let i = 6; i >= 0; i -= 1) {
+    out.push(new Date(parsed.getTime() - i * 86_400_000).toISOString().slice(0, 10));
+  }
+  return out;
 }
 
 export function createReportsRouter() {
@@ -239,22 +259,174 @@ export function createReportsRouter() {
       };
     });
 
+    const teamSummary = {
+      alertsCount: dayAlerts.length,
+      claimsCount: dayClaims.length,
+      clippedCount: dayClaims.filter(
+        (cl) => cl.status === 'Clipped' || cl.status === 'Published',
+      ).length,
+      clipsLoggedCount: dayClips.length,
+    };
+
+    const digestInput = {
+      dateIso: targetDate,
+      workspaceName: '',
+      metrics: teamSummary,
+    };
+
+    const aiParam = c.req.query('ai');
+    const aiRequested = aiParam === 'true' || aiParam === '1';
+
+    let aiInsightsUsed = false;
+    let aiStatus: DailyReportData['aiStatus'] = 'off';
+    let narrative = formatDeterministicDailyNarrative(digestInput);
+    let fallbackReason: string | null = null;
+
+    if (aiRequested) {
+      const provider = new GeminiInsightsProvider({
+        apiKey: c.env.GEMINI_API_KEY,
+        enabled: true,
+        gatewayUrl: c.env.AI_GATEWAY_URL,
+      });
+      const result = await provider.summarizeDailyDigestWithResult(digestInput);
+      aiInsightsUsed = result.aiInsightsUsed;
+      aiStatus = result.status;
+      narrative = result.narrative;
+      fallbackReason = result.fallbackReason;
+    }
+
     const report: DailyReportData = {
       date: targetDate,
       timezone,
-      aiInsightsUsed: false,
-      teamSummary: {
-        alertsCount: dayAlerts.length,
-        claimsCount: dayClaims.length,
-        clippedCount: dayClaims.filter((cl) => cl.status === 'Clipped').length,
-        clipsLoggedCount: dayClips.length,
-      },
+      aiInsightsUsed,
+      aiStatus,
+      narrative,
+      fallbackReason,
+      teamSummary,
       members,
       source: 'd1',
       asOf: new Date().toISOString(),
     };
 
     return c.json(report);
+  });
+
+  router.get('/reports/weekly', async (c) => {
+    const principal = c.get('principal');
+
+    const ws = await c.env.DB.prepare('SELECT timezone FROM workspaces WHERE id = ?')
+      .bind(principal.workspaceId)
+      .first<{ timezone: string }>();
+
+    const timezone = ws?.timezone ?? 'UTC';
+    const endDate = c.req.query('endDate') ?? formatDateInTimezone(new Date(), timezone);
+    const daysList = enumerateLast7Days(endDate);
+    const startDate = daysList[0] ?? endDate;
+    const daySet = new Set(daysList);
+
+    const [membersRes, alertsRes, claimsRes, clipsRes] = await Promise.all([
+      c.env.DB.prepare(
+        'SELECT user_id, email FROM memberships WHERE workspace_id = ? ORDER BY created_at ASC',
+      )
+        .bind(principal.workspaceId)
+        .all<{ user_id: string; email: string }>(),
+      c.env.DB.prepare('SELECT created_at FROM alerts WHERE workspace_id = ?')
+        .bind(principal.workspaceId)
+        .all<{ created_at: string }>(),
+      c.env.DB.prepare('SELECT user_id, status, created_at FROM claims WHERE workspace_id = ?')
+        .bind(principal.workspaceId)
+        .all<{ user_id: string; status: string; created_at: string }>(),
+      c.env.DB.prepare(
+        'SELECT user_id, manual_revenue_cents, created_at FROM clips WHERE workspace_id = ?',
+      )
+        .bind(principal.workspaceId)
+        .all<{ user_id: string | null; manual_revenue_cents: number | null; created_at: string }>(),
+    ]);
+
+    const toLocalDay = (iso: string): string | null => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return null;
+      const ymd = formatDateInTimezone(d, timezone);
+      return daySet.has(ymd) ? ymd : null;
+    };
+
+    const dayBuckets = new Map(
+      daysList.map((date) => [
+        date,
+        { date, alertsCount: 0, claimsCount: 0, clippedCount: 0, clipsLoggedCount: 0 },
+      ]),
+    );
+
+    const weekClaims: Array<{ user_id: string; status: string }> = [];
+    const weekClips: Array<{ user_id: string | null; manual_revenue_cents: number | null }> = [];
+    let alertsTotal = 0;
+
+    for (const a of alertsRes.results ?? []) {
+      const day = toLocalDay(a.created_at);
+      if (!day) continue;
+      alertsTotal += 1;
+      const b = dayBuckets.get(day);
+      if (b) b.alertsCount += 1;
+    }
+
+    for (const cl of claimsRes.results ?? []) {
+      const day = toLocalDay(cl.created_at);
+      if (!day) continue;
+      weekClaims.push(cl);
+      const b = dayBuckets.get(day);
+      if (b) {
+        b.claimsCount += 1;
+        if (cl.status === 'Clipped' || cl.status === 'Published') {
+          b.clippedCount += 1;
+        }
+      }
+    }
+
+    for (const cp of clipsRes.results ?? []) {
+      const day = toLocalDay(cp.created_at);
+      if (!day) continue;
+      weekClips.push(cp);
+      const b = dayBuckets.get(day);
+      if (b) b.clipsLoggedCount += 1;
+    }
+
+    const members = (membersRes.results ?? []).map((m) => {
+      const mClaims = weekClaims.filter((cl) => cl.user_id === m.user_id);
+      const mClips = weekClips.filter((cp) => cp.user_id === m.user_id);
+      return {
+        userId: m.user_id,
+        email: m.email,
+        claimsCount: mClaims.length,
+        clippedCount: mClaims.filter(
+          (cl) => cl.status === 'Clipped' || cl.status === 'Published',
+        ).length,
+        clipsLoggedCount: mClips.length,
+      };
+    });
+
+    const weekly: WeeklyReportData = {
+      startDate,
+      endDate: daysList[daysList.length - 1] ?? endDate,
+      timezone,
+      teamSummary: {
+        alertsCount: alertsTotal,
+        claimsCount: weekClaims.length,
+        clippedCount: weekClaims.filter(
+          (cl) => cl.status === 'Clipped' || cl.status === 'Published',
+        ).length,
+        clipsLoggedCount: weekClips.length,
+        manualRevenueCents: weekClips.reduce(
+          (sum, cp) => sum + (cp.manual_revenue_cents ?? 0),
+          0,
+        ),
+      },
+      days: Array.from(dayBuckets.values()),
+      members,
+      source: 'd1',
+      asOf: new Date().toISOString(),
+    };
+
+    return c.json(weekly);
   });
 
   return router;

@@ -1,21 +1,42 @@
 import { useQuery } from '@tanstack/react-query';
-import { FileBarChart2 } from 'lucide-react';
+import { FileBarChart2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
-import { fetchDailyReport, fetchScorecard, fetchSourceRoi } from '../lib/api-v1';
+import {
+  fetchDailyReport,
+  fetchScorecard,
+  fetchSourceRoi,
+  fetchWeeklyReport,
+} from '../lib/api-v1';
 import { formatCount, formatLatencyMs } from '../lib/url';
 
-type ReportTab = 'daily' | 'roi' | 'scorecard';
+type ReportTab = 'daily' | 'weekly' | 'roi' | 'scorecard';
+
+function todayInLocalIso(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
 
 export function ReportsPage() {
   const [tab, setTab] = useState<ReportTab>('daily');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(todayInLocalIso);
+  const [aiEnabled, setAiEnabled] = useState(false);
 
   const dailyQuery = useQuery({
-    queryKey: ['reports', 'daily', date],
-    queryFn: () => fetchDailyReport(date || undefined),
+    queryKey: ['reports', 'daily', date, aiEnabled],
+    queryFn: () => fetchDailyReport(date, aiEnabled),
     enabled: tab === 'daily',
+  });
+
+  const weeklyQuery = useQuery({
+    queryKey: ['reports', 'weekly'],
+    queryFn: fetchWeeklyReport,
+    enabled: tab === 'weekly',
   });
 
   const roiQuery = useQuery({
@@ -37,13 +58,14 @@ export function ReportsPage() {
         <div>
           <h1 className="text-[18px] font-semibold text-[var(--text-strong)]">Reports</h1>
           <p className="text-[12px] text-[var(--text-secondary)]">
-            Deterministic daily rollups, source ROI with sample floors, and accuracy scorecard.
+            Daily &amp; weekly rollups, optional grounded Insights, source ROI, and accuracy scorecard.
           </p>
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {(
             [
               ['daily', 'Daily Report'],
+              ['weekly', 'Weekly Report'],
               ['roi', 'Source ROI'],
               ['scorecard', 'Accuracy Scorecard'],
             ] as const
@@ -66,7 +88,7 @@ export function ReportsPage() {
 
       {tab === 'daily' && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <input
               type="date"
               value={date}
@@ -74,21 +96,47 @@ export function ReportsPage() {
               aria-label="Report date"
               className="min-h-[38px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px] text-[var(--text-primary)]"
             />
+            <button
+              type="button"
+              onClick={() => setAiEnabled((v) => !v)}
+              className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium ${
+                aiEnabled
+                  ? 'border-[var(--accent)] bg-[var(--accent-tint)] text-[var(--text-strong)]'
+                  : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" strokeWidth={1.5} />
+              AI Insights: {aiEnabled ? 'On' : 'Off'}
+            </button>
             {dailyQuery.data && (
               <span className="text-[11px] text-[var(--text-muted)]">
-                TZ: {dailyQuery.data.timezone} · AI Insights:{' '}
-                {dailyQuery.data.aiInsightsUsed ? 'On' : 'Off (Deterministic)'} ·{' '}
-                {dailyQuery.data.source}
+                TZ: {dailyQuery.data.timezone} · Status: {dailyQuery.data.aiStatus ?? 'off'}
               </span>
             )}
           </div>
 
           {dailyQuery.isLoading ? (
-            <Card className="p-6 text-[12px] text-[var(--text-secondary)]">
-              Loading daily report...
-            </Card>
+            <Card className="p-6 text-[12px] text-[var(--text-secondary)]">Loading daily report...</Card>
           ) : dailyQuery.data ? (
             <>
+              {dailyQuery.data.narrative && (
+                <Card className="p-4">
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="rounded-full bg-[var(--accent-tint)] px-2 py-0.5 font-semibold text-[var(--accent)]">
+                      Insights
+                    </span>
+                    {dailyQuery.data.fallbackReason && (
+                      <span className="text-[var(--text-muted)]">
+                        Deterministic fallback ({dailyQuery.data.fallbackReason})
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[13px] text-[var(--text-primary)]">
+                    {dailyQuery.data.narrative}
+                  </p>
+                </Card>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-4">
                 {[
                   ['Alerts', dailyQuery.data.teamSummary.alertsCount],
@@ -100,12 +148,11 @@ export function ReportsPage() {
                     <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
                       {label}
                     </div>
-                    <div className="mt-1 text-[20px] font-bold text-[var(--text-strong)]">
-                      {val}
-                    </div>
+                    <div className="mt-1 text-[20px] font-bold text-[var(--text-strong)]">{val}</div>
                   </Card>
                 ))}
               </div>
+
               <Card className="p-4">
                 <h2 className="text-[13px] font-semibold text-[var(--text-strong)]">
                   Member Breakdown ({dailyQuery.data.date})
@@ -138,6 +185,66 @@ export function ReportsPage() {
                     </table>
                   </div>
                 )}
+              </Card>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {tab === 'weekly' && (
+        <div className="space-y-3">
+          {weeklyQuery.isLoading ? (
+            <Card className="p-6 text-[12px] text-[var(--text-secondary)]">Loading weekly report...</Card>
+          ) : weeklyQuery.data ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-5">
+                {[
+                  ['Alerts (7d)', weeklyQuery.data.teamSummary.alertsCount],
+                  ['Claims (7d)', weeklyQuery.data.teamSummary.claimsCount],
+                  ['Clipped (7d)', weeklyQuery.data.teamSummary.clippedCount],
+                  ['Clips Logged', weeklyQuery.data.teamSummary.clipsLoggedCount],
+                  [
+                    'Manual Rev',
+                    `$${(weeklyQuery.data.teamSummary.manualRevenueCents / 100).toFixed(2)}`,
+                  ],
+                ].map(([label, val]) => (
+                  <Card key={String(label)} className="p-3.5">
+                    <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                      {label}
+                    </div>
+                    <div className="mt-1 text-[18px] font-bold text-[var(--text-strong)]">{val}</div>
+                  </Card>
+                ))}
+              </div>
+              <Card className="p-4">
+                <h2 className="text-[13px] font-semibold text-[var(--text-strong)]">
+                  7-Day Rollup ({weeklyQuery.data.startDate} &rarr; {weeklyQuery.data.endDate},{' '}
+                  {weeklyQuery.data.timezone})
+                </h2>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-left text-[12px]">
+                    <thead className="border-b border-[var(--divider)] text-[11px] text-[var(--text-muted)]">
+                      <tr>
+                        <th className="py-2">Date</th>
+                        <th className="py-2">Alerts</th>
+                        <th className="py-2">Claims</th>
+                        <th className="py-2">Clipped</th>
+                        <th className="py-2">Clips Logged</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--divider)]">
+                      {weeklyQuery.data.days.map((d) => (
+                        <tr key={d.date}>
+                          <td className="py-2 font-mono">{d.date}</td>
+                          <td className="py-2 font-mono">{d.alertsCount}</td>
+                          <td className="py-2 font-mono">{d.claimsCount}</td>
+                          <td className="py-2 font-mono">{d.clippedCount}</td>
+                          <td className="py-2 font-mono">{d.clipsLoggedCount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </Card>
             </>
           ) : null}
@@ -208,7 +315,12 @@ export function ReportsPage() {
                   ['Rising Precision', scorecardQuery.data.rising],
                   ['Live Moments Precision', scorecardQuery.data.liveMoments],
                 ].map(([label, metric]) => {
-                  const m = metric as ScorecardDataMetric;
+                  const m = metric as {
+                    precision: number | null;
+                    sampleSize: number;
+                    sampleFloor: number;
+                    status: 'ready' | 'not enough data yet';
+                  };
                   return (
                     <div
                       key={String(label)}
@@ -229,7 +341,7 @@ export function ReportsPage() {
                   );
                 })}
               </div>
-              <div className="grid gap-3 sm:grid-cols-3 text-[12px]">
+              <div className="grid gap-3 text-[12px] sm:grid-cols-3">
                 <div>
                   Avg time-to-alert:{' '}
                   <span className="font-mono text-[var(--text-strong)]">
@@ -257,10 +369,3 @@ export function ReportsPage() {
     </div>
   );
 }
-
-type ScorecardDataMetric = {
-  precision: number | null;
-  sampleSize: number;
-  sampleFloor: number;
-  status: 'ready' | 'not enough data yet';
-};

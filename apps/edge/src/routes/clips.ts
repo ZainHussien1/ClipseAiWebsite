@@ -3,8 +3,10 @@ import {
   AppError,
   confirmClipLinkSchema,
   createClipSchema,
+  normalizeHandle,
   type ClipPlatform,
   type ClipRecord,
+  type Platform,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
 import { requireWriterRole } from '../auth.js';
@@ -19,6 +21,10 @@ interface ClipRow {
   platform: ClipPlatform;
   title: string | null;
   needs_confirmation: number;
+  manual_revenue_cents: number | null;
+  publish_time: string | null;
+  source_item_title: string | null;
+  source_creator_name: string | null;
   created_at: string;
   stats_source: 'api' | 'manual' | null;
   views: number | null;
@@ -34,6 +40,16 @@ interface OwnUploadRow {
   url: string;
   published_at: string;
   account_handle: string;
+}
+
+interface SourcePickerRow {
+  item_id: string;
+  title: string;
+  creator_name: string;
+  creator_handle: string;
+  platform: Platform;
+  url: string;
+  published_at: string;
 }
 
 function mapClipRow(r: ClipRow): ClipRecord {
@@ -52,6 +68,11 @@ function mapClipRow(r: ClipRow): ClipRecord {
     likes: r.likes,
     comments: r.comments,
     statsCapturedAt: r.stats_captured_at,
+    manualRevenueCents: r.manual_revenue_cents,
+    revenueSource: r.manual_revenue_cents !== null ? 'manual' : null,
+    publishTime: r.publish_time,
+    sourceItemTitle: r.source_item_title,
+    sourceCreatorName: r.source_creator_name,
     createdAt: r.created_at,
   };
 }
@@ -62,12 +83,15 @@ export function createClipsRouter() {
   router.get('/', async (c) => {
     const principal = c.get('principal');
 
-    const [clipsRes, ownRes] = await Promise.all([
+    const [clipsRes, ownRes, pickerRes] = await Promise.all([
       c.env.DB.prepare(
         `SELECT c.id, c.workspace_id, c.claim_id, c.source_item_id, c.user_id, c.url, c.platform,
-                c.title, c.needs_confirmation, c.created_at,
+                c.title, c.needs_confirmation, c.manual_revenue_cents, c.publish_time, c.created_at,
+                i.title AS source_item_title, a.display_name AS source_creator_name,
                 cs.source AS stats_source, cs.views, cs.likes, cs.comments, cs.captured_at AS stats_captured_at
          FROM clips c
+         LEFT JOIN items i ON i.id = c.source_item_id
+         LEFT JOIN platform_accounts a ON a.id = i.account_id
          LEFT JOIN clip_stats_snapshots cs ON cs.id = (
            SELECT cs2.id FROM clip_stats_snapshots cs2
            WHERE cs2.workspace_id = c.workspace_id AND cs2.clip_id = c.id
@@ -93,6 +117,18 @@ export function createClipsRouter() {
       )
         .bind(principal.workspaceId, principal.workspaceId)
         .all<OwnUploadRow>(),
+      c.env.DB.prepare(
+        `SELECT i.id AS item_id, i.title, a.display_name AS creator_name, a.handle AS creator_handle,
+                i.platform, i.url, i.published_at
+         FROM items i
+         JOIN platform_accounts a ON a.id = i.account_id
+         JOIN follows f ON f.account_id = a.id
+         WHERE f.workspace_id = ? AND f.archived = 0
+         ORDER BY i.published_at DESC
+         LIMIT 50`,
+      )
+        .bind(principal.workspaceId)
+        .all<SourcePickerRow>(),
     ]);
 
     return c.json({
@@ -104,6 +140,15 @@ export function createClipsRouter() {
         url: r.url,
         publishedAt: r.published_at,
         accountHandle: r.account_handle,
+      })),
+      sourceItems: (pickerRes.results ?? []).map((r) => ({
+        itemId: r.item_id,
+        title: r.title,
+        creatorName: r.creator_name,
+        creatorHandle: normalizeHandle(r.creator_handle),
+        platform: r.platform,
+        url: r.url,
+        publishedAt: r.published_at,
       })),
       source: 'd1',
       asOf: new Date().toISOString(),
@@ -152,14 +197,19 @@ export function createClipsRouter() {
 
     const needsConfirmation = resolvedSourceItemId === null ? 1 : 0;
     const isManualStats = body.data.manualStats ? 1 : 0;
+    const manualRevenueCents = body.data.manualRevenueCents ?? null;
+    const publishTime = body.data.publishTime ?? null;
+    const startSec = body.data.startSec ?? null;
+    const endSec = body.data.endSec ?? null;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
     await c.env.DB.prepare(
       `INSERT INTO clips
          (id, workspace_id, claim_id, source_item_id, user_id, url, platform, title, description,
-          manual_stats_json, is_manual_stats, needs_confirmation, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          manual_stats_json, is_manual_stats, needs_confirmation, manual_revenue_cents, publish_time,
+          start_sec, end_sec, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         id,
@@ -174,10 +224,29 @@ export function createClipsRouter() {
         body.data.manualStats ? JSON.stringify(body.data.manualStats) : null,
         isManualStats,
         needsConfirmation,
+        manualRevenueCents,
+        publishTime,
+        startSec,
+        endSec,
         now,
         now,
       )
       .run();
+
+    let sourceItemTitle: string | null = null;
+    let sourceCreatorName: string | null = null;
+    if (resolvedSourceItemId) {
+      const srcRow = await c.env.DB.prepare(
+        `SELECT i.title, a.display_name
+         FROM items i
+         JOIN platform_accounts a ON a.id = i.account_id
+         WHERE i.id = ?`,
+      )
+        .bind(resolvedSourceItemId)
+        .first<{ title: string; display_name: string }>();
+      sourceItemTitle = srcRow?.title ?? null;
+      sourceCreatorName = srcRow?.display_name ?? null;
+    }
 
     if (body.data.manualStats) {
       await c.env.DB.prepare(
@@ -211,6 +280,11 @@ export function createClipsRouter() {
       likes: body.data.manualStats?.likes ?? null,
       comments: body.data.manualStats?.comments ?? null,
       statsCapturedAt: body.data.manualStats ? now : null,
+      manualRevenueCents,
+      revenueSource: manualRevenueCents !== null ? 'manual' : null,
+      publishTime,
+      sourceItemTitle,
+      sourceCreatorName,
       createdAt: now,
     };
 

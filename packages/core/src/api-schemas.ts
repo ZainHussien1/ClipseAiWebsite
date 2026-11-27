@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import { itemKindSchema } from './providers/ingest-types.js';
 import { platformSchema } from './types.js';
-
-export const risingTierSchema = z.enum(['none', 'rising', 'breakout', 'viral']);
-export type RisingTier = z.infer<typeof risingTierSchema>;
+import {
+  aiNarrativeStatusSchema,
+  dailyReportMemberSchema,
+  risingTierSchema,
+  sourceRuleSchema,
+} from './v5-schemas.js';
 
 export const claimStatusSchema = z.enum([
   'New',
@@ -14,14 +17,6 @@ export const claimStatusSchema = z.enum([
   'Skipped',
 ]);
 export type ClaimStatus = z.infer<typeof claimStatusSchema>;
-
-export const sourceRuleSchema = z.object({
-  minRisingLevel: risingTierSchema.exclude(['none']).default('rising'),
-  notifyLive: z.boolean().default(true),
-  notifyUploads: z.boolean().default(true),
-  muted: z.boolean().default(false),
-});
-export type SourceRule = z.infer<typeof sourceRuleSchema>;
 
 export const sourceTagSchema = z.string().trim().min(1).max(32);
 
@@ -456,21 +451,38 @@ export const manualClipStatsSchema = z.object({
 });
 export type ManualClipStats = z.infer<typeof manualClipStatsSchema>;
 
-export const createClipSchema = z.object({
-  url: z
-    .string()
-    .trim()
-    .url()
-    .refine((u) => u.startsWith('https://'), {
-      message: 'Clip URL must use https://',
-    }),
-  platform: clipPlatformSchema,
-  title: z.string().trim().min(1).max(200).optional(),
-  description: z.string().trim().max(2000).optional(),
-  claimId: z.string().trim().min(1).max(128).optional(),
-  sourceItemId: z.string().trim().min(1).max(128).optional(),
-  manualStats: manualClipStatsSchema.optional(),
-});
+export const createClipSchema = z
+  .object({
+    url: z
+      .string()
+      .trim()
+      .url()
+      .refine((u) => u.startsWith('https://'), {
+        message: 'Clip URL must use https://',
+      }),
+    platform: clipPlatformSchema,
+    title: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().max(2000).optional(),
+    claimId: z.string().trim().min(1).max(128).optional(),
+    sourceItemId: z.string().trim().min(1).max(128).optional(),
+    manualStats: manualClipStatsSchema.optional(),
+    manualRevenueCents: z.number().int().nonnegative().max(100_000_000).optional(),
+    publishTime: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .refine((v) => Number.isFinite(Date.parse(v)), {
+        message: 'publishTime must be a valid ISO date/datetime',
+      })
+      .optional(),
+    startSec: z.number().int().nonnegative().optional(),
+    endSec: z.number().int().positive().optional(),
+  })
+  .refine(
+    (v) => v.endSec === undefined || v.startSec === undefined || v.endSec > v.startSec,
+    { message: 'endSec must be greater than startSec' },
+  );
 export type CreateClipInput = z.infer<typeof createClipSchema>;
 
 export const confirmClipLinkSchema = z.object({
@@ -493,6 +505,11 @@ export const clipRecordSchema = z.object({
   likes: z.number().int().nonnegative().nullable(),
   comments: z.number().int().nonnegative().nullable(),
   statsCapturedAt: z.string().nullable(),
+  manualRevenueCents: z.number().int().nonnegative().nullable().optional(),
+  revenueSource: z.literal('manual').nullable().optional(),
+  publishTime: z.string().nullable().optional(),
+  sourceItemTitle: z.string().nullable().optional(),
+  sourceCreatorName: z.string().nullable().optional(),
   createdAt: z.string(),
 });
 export type ClipRecord = z.infer<typeof clipRecordSchema>;
@@ -534,18 +551,13 @@ export const scorecardSchema = z.object({
 });
 export type ScorecardData = z.infer<typeof scorecardSchema>;
 
-export const dailyReportMemberSchema = z.object({
-  userId: z.string(),
-  email: z.string(),
-  claimsCount: z.number().int().nonnegative(),
-  clippedCount: z.number().int().nonnegative(),
-  clipsLoggedCount: z.number().int().nonnegative(),
-});
-
 export const dailyReportSchema = z.object({
   date: z.string(),
   timezone: z.string(),
   aiInsightsUsed: z.boolean(),
+  aiStatus: aiNarrativeStatusSchema.optional(),
+  narrative: z.string().optional(),
+  fallbackReason: z.string().nullable().optional(),
   teamSummary: z.object({
     alertsCount: z.number().int().nonnegative(),
     claimsCount: z.number().int().nonnegative(),
@@ -640,3 +652,5 @@ export const integrationVerifyResponseSchema = z.object({
   checkedAt: z.string(),
 });
 export type IntegrationVerifyResponse = z.infer<typeof integrationVerifyResponseSchema>;
+
+export * from './v5-schemas.js';

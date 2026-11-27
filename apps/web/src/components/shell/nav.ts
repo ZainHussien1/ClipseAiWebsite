@@ -2,6 +2,7 @@ import {
   Bell,
   BellRing,
   ClipboardCheck,
+  Database,
   FileBarChart2,
   KanbanSquare,
   LayoutDashboard,
@@ -22,11 +23,12 @@ export type AppRoutePath =
   | '/alerts'
   | '/feed'
   | '/rising'
-  | '/sources'
+  | '/creators'
   | '/work'
   | '/my-work'
   | '/clip-log'
   | '/reports'
+  | '/sources'
   | '/notifications'
   | '/settings';
 
@@ -77,11 +79,11 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'Velocity & engagement breakout detector with hysteresis.',
   },
   {
-    to: '/sources',
+    to: '/creators',
     label: 'Creators',
     section: 'Discover',
     icon: Users,
-    description: 'Tracked YouTube, Twitch, and Kick creator channels.',
+    description: 'Creator intelligence, baselines, cadence, notes, and ROI.',
   },
   {
     to: '/work',
@@ -109,7 +111,14 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Reports',
     section: 'Insights',
     icon: FileBarChart2,
-    description: 'Daily report, source ROI, and accuracy scorecard.',
+    description: 'Daily/Weekly reports, source ROI, and accuracy scorecard.',
+  },
+  {
+    to: '/sources',
+    label: 'Sources',
+    section: 'Admin',
+    icon: Database,
+    description: 'Add, sync, pause, or archive YouTube, Twitch, and Kick channels.',
   },
   {
     to: '/notifications',
@@ -123,6 +132,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Settings',
     section: 'Admin',
     icon: Settings,
-    description: 'Integrations, members, Our Channels, export, and security.',
+    description: 'Integrations, members, Our Channels, health, audit, and data quality.',
   },
 ];

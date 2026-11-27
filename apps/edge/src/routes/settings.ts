@@ -3,6 +3,8 @@ import {
   AppError,
   exportFormatSchema,
   hasRoleAtLeast,
+  inviteMemberSchema,
+  MAX_TEAM_SEATS,
   memberAvailabilitySchema,
   memberUpdateSchema,
   type MemberAvailability,
@@ -10,6 +12,7 @@ import {
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
 import { requireWriterRole } from '../auth.js';
+import { hashPassphrase } from '../session.js';
 
 interface MemberRow {
   id: string;
@@ -65,6 +68,100 @@ export function createSettingsRouter() {
     });
   });
 
+  router.post('/settings/members/invite', async (c) => {
+    const principal = c.get('principal');
+    if (!hasRoleAtLeast(principal.role, 'Admin')) {
+      throw AppError.forbidden('Only Admins or Owners can invite members');
+    }
+
+    const body = inviteMemberSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      throw AppError.badRequest('Invalid invite member payload', body.error.flatten());
+    }
+
+    if (body.data.role === 'Owner' && principal.role !== 'Owner') {
+      throw AppError.forbidden('Only an Owner can invite another Owner');
+    }
+
+    const email = body.data.email.toLowerCase();
+    const now = new Date().toISOString();
+    const passphraseHash = await hashPassphrase(body.data.temporaryPassphrase);
+
+    const existing = await c.env.DB.prepare(
+      'SELECT user_id FROM memberships WHERE workspace_id = ? AND LOWER(email) = ? LIMIT 1',
+    )
+      .bind(principal.workspaceId, email)
+      .first<{ user_id: string }>();
+
+    if (existing) {
+      await c.env.DB.prepare(
+        'UPDATE memberships SET role = ?, passphrase_hash = ?, updated_at = ? WHERE workspace_id = ? AND user_id = ?',
+      )
+        .bind(body.data.role, passphraseHash, now, principal.workspaceId, existing.user_id)
+        .run();
+    } else {
+      const seatRow = await c.env.DB.prepare(
+        'SELECT COUNT(*) AS cnt FROM memberships WHERE workspace_id = ?',
+      )
+        .bind(principal.workspaceId)
+        .first<{ cnt: number }>();
+
+      if ((seatRow?.cnt ?? 0) >= MAX_TEAM_SEATS) {
+        throw AppError.badRequest(
+          `Team seat limit reached (maximum ${MAX_TEAM_SEATS} members)`,
+        );
+      }
+
+      const userId = `usr-${crypto.randomUUID().slice(0, 8)}`;
+      const membershipId = `mem-${crypto.randomUUID().slice(0, 8)}`;
+      await c.env.DB.prepare(
+        `INSERT INTO memberships (id, workspace_id, user_id, email, role, passphrase_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          membershipId,
+          principal.workspaceId,
+          userId,
+          email,
+          body.data.role,
+          passphraseHash,
+          now,
+          now,
+        )
+        .run();
+    }
+
+    const totalSeatsRow = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS cnt FROM memberships WHERE workspace_id = ?',
+    )
+      .bind(principal.workspaceId)
+      .first<{ cnt: number }>();
+
+    await c.env.DB.prepare(
+      `INSERT INTO audit_logs (id, workspace_id, actor_user_id, action, target_type, target_id, metadata_json, created_at)
+       VALUES (?, ?, ?, 'member.invited', 'membership', ?, ?, ?)`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        principal.workspaceId,
+        principal.userId,
+        email,
+        JSON.stringify({ role: body.data.role }),
+        now,
+      )
+      .run();
+
+    return c.json(
+      {
+        ok: true,
+        message: 'Member allowlist updated.',
+        maxSeats: MAX_TEAM_SEATS,
+        seatsUsed: totalSeatsRow?.cnt ?? 0,
+      },
+      existing ? 200 : 201,
+    );
+  });
+
   router.patch('/settings/members/:userId', async (c) => {
     const principal = c.get('principal');
     if (!hasRoleAtLeast(principal.role, 'Admin')) {
@@ -81,16 +178,33 @@ export function createSettingsRouter() {
       throw AppError.forbidden('Only an Owner can assign the Owner role');
     }
 
+    const targetMember = await c.env.DB.prepare(
+      'SELECT role FROM memberships WHERE workspace_id = ? AND user_id = ?',
+    )
+      .bind(principal.workspaceId, targetUserId)
+      .first<{ role: Role }>();
+
+    if (!targetMember) {
+      throw AppError.notFound('Member not found');
+    }
+
+    if (targetMember.role === 'Owner' && body.data.role !== 'Owner') {
+      const ownersRow = await c.env.DB.prepare(
+        "SELECT COUNT(*) AS cnt FROM memberships WHERE workspace_id = ? AND role = 'Owner'",
+      )
+        .bind(principal.workspaceId)
+        .first<{ cnt: number }>();
+      if ((ownersRow?.cnt ?? 0) <= 1) {
+        throw AppError.badRequest('Cannot demote the sole Owner of the workspace');
+      }
+    }
+
     const now = new Date().toISOString();
-    const res = await c.env.DB.prepare(
+    await c.env.DB.prepare(
       'UPDATE memberships SET role = ?, updated_at = ? WHERE workspace_id = ? AND user_id = ?',
     )
       .bind(body.data.role, now, principal.workspaceId, targetUserId)
       .run();
-
-    if ((res.meta?.changes ?? 0) === 0) {
-      throw AppError.notFound('Member not found');
-    }
 
     await c.env.DB.prepare(
       `INSERT INTO audit_logs (id, workspace_id, actor_user_id, action, target_type, target_id, metadata_json, created_at)
@@ -120,15 +234,32 @@ export function createSettingsRouter() {
       throw AppError.badRequest('Cannot remove yourself from the workspace');
     }
 
-    const res = await c.env.DB.prepare(
+    const targetMember = await c.env.DB.prepare(
+      'SELECT role FROM memberships WHERE workspace_id = ? AND user_id = ?',
+    )
+      .bind(principal.workspaceId, targetUserId)
+      .first<{ role: Role }>();
+
+    if (!targetMember) {
+      throw AppError.notFound('Member not found');
+    }
+
+    if (targetMember.role === 'Owner') {
+      const ownersRow = await c.env.DB.prepare(
+        "SELECT COUNT(*) AS cnt FROM memberships WHERE workspace_id = ? AND role = 'Owner'",
+      )
+        .bind(principal.workspaceId)
+        .first<{ cnt: number }>();
+      if ((ownersRow?.cnt ?? 0) <= 1) {
+        throw AppError.badRequest('Cannot remove the sole Owner of the workspace');
+      }
+    }
+
+    await c.env.DB.prepare(
       'DELETE FROM memberships WHERE workspace_id = ? AND user_id = ?',
     )
       .bind(principal.workspaceId, targetUserId)
       .run();
-
-    if ((res.meta?.changes ?? 0) === 0) {
-      throw AppError.notFound('Member not found');
-    }
 
     await c.env.DB.prepare(
       `INSERT INTO audit_logs (id, workspace_id, actor_user_id, action, target_type, target_id, metadata_json, created_at)
@@ -303,6 +434,8 @@ export function createSettingsRouter() {
     const statements = [
       c.env.DB.prepare('DELETE FROM clip_stats_snapshots WHERE workspace_id = ?').bind(wsId),
       c.env.DB.prepare('DELETE FROM clips WHERE workspace_id = ?').bind(wsId),
+      c.env.DB.prepare('DELETE FROM creator_notes WHERE workspace_id = ?').bind(wsId),
+      c.env.DB.prepare('DELETE FROM dlq_messages WHERE workspace_id = ?').bind(wsId),
       c.env.DB.prepare('DELETE FROM alert_votes WHERE workspace_id = ?').bind(wsId),
       c.env.DB.prepare('DELETE FROM notifications WHERE workspace_id = ?').bind(wsId),
       c.env.DB.prepare('DELETE FROM alerts WHERE workspace_id = ?').bind(wsId),

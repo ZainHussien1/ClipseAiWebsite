@@ -5,15 +5,18 @@ import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ApiError, confirmClipLink, createClip, listClips, listSources } from '../lib/api-v1';
 import type { ClipPlatform } from '../lib/contracts';
-import { formatCount, safeExternalUrl } from '../lib/url';
+import { formatCount, parseMmSsToSec, safeExternalUrl } from '../lib/url';
 
 export function ClipLogPage() {
   const queryClient = useQueryClient();
   const [url, setUrl] = useState('');
   const [platform, setPlatform] = useState<ClipPlatform>('youtube');
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [sourceItemId, setSourceItemId] = useState('');
+  const [startMmSs, setStartMmSs] = useState('');
+  const [endMmSs, setEndMmSs] = useState('');
   const [manualViews, setManualViews] = useState('');
+  const [manualRevenueUsd, setManualRevenueUsd] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmLinks, setConfirmLinks] = useState<Record<string, string>>({});
 
@@ -25,22 +28,21 @@ export function ClipLogPage() {
     onSuccess: () => {
       setUrl('');
       setTitle('');
-      setDescription('');
+      setSourceItemId('');
+      setStartMmSs('');
+      setEndMmSs('');
       setManualViews('');
+      setManualRevenueUsd('');
       setFormError(null);
       void queryClient.invalidateQueries({ queryKey: ['clips'] });
     },
-    onError: (err) => {
-      setFormError(err instanceof ApiError ? err.message : 'Failed to log clip');
-    },
+    onError: (err) => setFormError(err instanceof ApiError ? err.message : 'Failed to log clip'),
   });
 
   const confirmMutation = useMutation({
-    mutationFn: ({ clipId, sourceItemId }: { clipId: string; sourceItemId: string }) =>
-      confirmClipLink(clipId, sourceItemId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['clips'] });
-    },
+    mutationFn: ({ clipId, targetItemId }: { clipId: string; targetItemId: string }) =>
+      confirmClipLink(clipId, targetItemId),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['clips'] }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -55,24 +57,40 @@ export function ClipLogPage() {
       setFormError('Manual views must be a non-negative integer.');
       return;
     }
+    const revNum = manualRevenueUsd.trim() !== '' ? Number(manualRevenueUsd) : null;
+    if (revNum !== null && (!Number.isFinite(revNum) || revNum < 0)) {
+      setFormError('Manual revenue must be a non-negative dollar amount.');
+      return;
+    }
+    const startSec = startMmSs.trim() ? parseMmSsToSec(startMmSs) : undefined;
+    const endSec = endMmSs.trim() ? parseMmSsToSec(endMmSs) : undefined;
+    if ((startMmSs.trim() && startSec === null) || (endMmSs.trim() && endSec === null)) {
+      setFormError('Range must use mm:ss or integer seconds.');
+      return;
+    }
+
     createMutation.mutate({
       url: url.trim(),
       platform,
       title: title.trim() || undefined,
-      description: description.trim() || undefined,
+      sourceItemId: sourceItemId || undefined,
+      ...(startSec !== undefined && startSec !== null ? { startSec } : {}),
+      ...(endSec !== undefined && endSec !== null ? { endSec } : {}),
       manualStats: viewsNum !== null ? { views: viewsNum } : undefined,
+      manualRevenueCents: revNum !== null ? Math.round(revNum * 100) : undefined,
     });
   };
 
   const ownChannels = (sourcesQuery.data ?? []).filter((s) => s.isOwn);
-  const clips = clipsQuery.data ?? [];
+  const clips = clipsQuery.data?.clips ?? [];
+  const sourceItems = clipsQuery.data?.sourceItems ?? [];
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-[18px] font-semibold text-[var(--text-strong)]">Clip Log</h1>
         <p className="text-[12px] text-[var(--text-secondary)]">
-          Published clips, Our Channels prefill, source link confirmation, and manual vs API stats.
+          Published clips, source picker, mm:ss range, and explicitly badged manual stats/revenue.
         </p>
       </div>
 
@@ -102,13 +120,13 @@ export function ClipLogPage() {
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://youtube.com/shorts/... or TikTok/IG/X clip URL"
             aria-label="Clip URL"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] sm:col-span-5"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] sm:col-span-5"
           />
           <select
             value={platform}
             onChange={(e) => setPlatform(e.target.value as ClipPlatform)}
             aria-label="Clip platform"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px] text-[var(--text-primary)] sm:col-span-2"
+            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px] sm:col-span-2"
           >
             <option value="youtube">YouTube</option>
             <option value="tiktok">TikTok</option>
@@ -121,9 +139,38 @@ export function ClipLogPage() {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title (optional)"
+            placeholder="Clip title (optional)"
             aria-label="Clip title"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] sm:col-span-3"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] sm:col-span-5"
+          />
+          <select
+            value={sourceItemId}
+            onChange={(e) => setSourceItemId(e.target.value)}
+            aria-label="Source item"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px] sm:col-span-4"
+          >
+            <option value="">Select source video/stream (optional)</option>
+            {sourceItems.map((si) => (
+              <option key={si.itemId} value={si.itemId}>
+                {si.creatorName} — {si.title}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={startMmSs}
+            onChange={(e) => setStartMmSs(e.target.value)}
+            placeholder="Start mm:ss"
+            aria-label="Start range"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 font-mono text-[12px] sm:col-span-2"
+          />
+          <input
+            type="text"
+            value={endMmSs}
+            onChange={(e) => setEndMmSs(e.target.value)}
+            placeholder="End mm:ss"
+            aria-label="End range"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 font-mono text-[12px] sm:col-span-2"
           />
           <input
             type="number"
@@ -132,23 +179,27 @@ export function ClipLogPage() {
             onChange={(e) => setManualViews(e.target.value)}
             placeholder="Manual views"
             aria-label="Manual views"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] sm:col-span-2"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px] sm:col-span-2"
           />
           <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description (paste source URL for auto-link match)"
-            aria-label="Clip description"
-            className="min-h-[40px] rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[13px] text-[var(--text-primary)] sm:col-span-10"
+            type="number"
+            min={0}
+            step="0.01"
+            value={manualRevenueUsd}
+            onChange={(e) => setManualRevenueUsd(e.target.value)}
+            placeholder="Rev USD"
+            aria-label="Manual revenue USD"
+            className="min-h-[40px] min-w-0 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px] sm:col-span-2"
           />
-          <button
-            type="submit"
-            disabled={createMutation.isPending}
-            className="min-h-[40px] rounded-lg bg-[var(--accent)] px-4 text-[12px] font-semibold text-[#0c1519] disabled:opacity-50 sm:col-span-2"
-          >
-            {createMutation.isPending ? 'Logging...' : 'Log Clip'}
-          </button>
+          <div className="flex justify-end sm:col-span-12">
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="min-h-[40px] rounded-lg bg-[var(--accent)] px-5 text-[12px] font-semibold text-[#0c1519] disabled:opacity-50"
+            >
+              {createMutation.isPending ? 'Logging...' : 'Log Clip'}
+            </button>
+          </div>
         </form>
         {formError && (
           <div
@@ -186,15 +237,15 @@ export function ClipLogPage() {
                           className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
                           style={{ backgroundColor: 'var(--warning-bg)', color: 'var(--warning)' }}
                         >
-                          manual
+                          manual stats
                         </span>
                       )}
-                      {clip.statsSource === 'api' && (
+                      {clip.manualRevenueCents !== null && clip.manualRevenueCents !== undefined && (
                         <span
                           className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
-                          style={{ backgroundColor: 'var(--success-bg)', color: 'var(--success)' }}
+                          style={{ backgroundColor: 'var(--warning-bg)', color: 'var(--warning)' }}
                         >
-                          api
+                          manual ${(clip.manualRevenueCents / 100).toFixed(2)}
                         </span>
                       )}
                       {clip.needsConfirmation && (
@@ -206,13 +257,18 @@ export function ClipLogPage() {
                     <h2 className="mt-1.5 text-[14px] font-semibold text-[var(--text-strong)]">
                       {clip.title ?? clip.url}
                     </h2>
+                    {clip.sourceItemTitle && (
+                      <div className="mt-0.5 text-[12px] text-[var(--text-secondary)]">
+                        Source: {clip.sourceCreatorName ? `${clip.sourceCreatorName} — ` : ''}
+                        {clip.sourceItemTitle}
+                      </div>
+                    )}
                     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-secondary)]">
                       <span>Views: {formatCount(clip.views)}</span>
                       <span>Stats source: {clip.statsSource ?? 'unknown'}</span>
                       {clip.statsCapturedAt && <span>Captured: {clip.statsCapturedAt}</span>}
                     </div>
                   </div>
-
                   {safeUrl && (
                     <a
                       href={safeUrl}
@@ -228,24 +284,29 @@ export function ClipLogPage() {
 
                 {clip.needsConfirmation && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--divider)] pt-3">
-                    <input
-                      type="text"
+                    <select
                       value={confirmLinks[clip.id] ?? ''}
                       onChange={(e) =>
                         setConfirmLinks((prev) => ({ ...prev, [clip.id]: e.target.value }))
                       }
-                      placeholder="Source item ID..."
-                      aria-label="Source item ID to confirm"
-                      className="min-h-[36px] flex-1 rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px] text-[var(--text-primary)]"
-                    />
+                      aria-label="Select source item to confirm"
+                      className="min-h-[36px] flex-1 rounded-lg border border-[var(--input-border)] bg-[var(--input)] px-3 text-[12px]"
+                    >
+                      <option value="">Choose source item...</option>
+                      {sourceItems.map((si) => (
+                        <option key={si.itemId} value={si.itemId}>
+                          {si.creatorName} — {si.title}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       onClick={() => {
                         const target = (confirmLinks[clip.id] ?? '').trim();
                         if (!target) return;
-                        confirmMutation.mutate({ clipId: clip.id, sourceItemId: target });
+                        confirmMutation.mutate({ clipId: clip.id, targetItemId: target });
                       }}
-                      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[var(--accent-tint)] px-3 text-[12px] font-medium text-[var(--text-strong)]"
+                      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[var(--accent-tint)] px-3 text-[12px] font-medium"
                     >
                       <Link2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                       Confirm Link
