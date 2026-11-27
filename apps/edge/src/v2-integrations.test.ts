@@ -59,6 +59,7 @@ describe('V2 Integrations API, OAuth callbacks, and dynamic Kick public key', ()
       '0005_phase5.sql',
       '0006_v2_upgrade.sql',
       '0007_v3_board.sql',
+      '0008_v4_alerts.sql',
     ]) {
       sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
     }

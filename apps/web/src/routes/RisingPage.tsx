@@ -62,7 +62,7 @@ export function RisingPage() {
         <div>
           <h1 className="text-[18px] font-semibold text-[var(--text-strong)]">Rising</h1>
           <p className="text-[12px] text-[var(--text-secondary)]">
-            Independently scored velocity and engagement breakouts with hysteresis.
+            Snapshot-delta velocity against creator-kind baselines (&gt;=5 items &gt;7d old).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -110,6 +110,11 @@ export function RisingPage() {
             const externalUrl = safeExternalUrl(item.url);
             const follow = sourceByAccount.get(item.accountId);
             const claim = item.claim;
+            const paceText = item.paceLabel ?? badge.label;
+            const baselineText =
+              item.baselineN !== undefined && item.baselineRequired !== undefined
+                ? `Baseline: ${item.baselineN}/${item.baselineRequired}`
+                : null;
             return (
               <Card key={item.itemId} className="p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
@@ -119,7 +124,7 @@ export function RisingPage() {
                         className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
                         style={{ backgroundColor: badge.bg, color: badge.color }}
                       >
-                        {badge.label}
+                        {paceText}
                       </span>
                       <span className="rounded border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 uppercase text-[var(--text-secondary)]">
                         {item.platform}
@@ -151,6 +156,7 @@ export function RisingPage() {
                           ? `${item.engagementRatio.toFixed(2)}x`
                           : 'n/a'}
                       </span>
+                      {baselineText && <span>{baselineText}</span>}
                       <span>
                         {formatProvenance(item.source, item.platform)} ·{' '}
                         {formatAgeSeconds(item.ageSeconds)}

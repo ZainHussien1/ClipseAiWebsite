@@ -20,6 +20,7 @@ export interface EngineEnv {
   DB: D1Database;
   ENVIRONMENT: string;
   AI_INSIGHTS_ENABLED: string;
+  NOTIFY_QUEUE?: Queue;
   WEBHOOK_ENCRYPTION_KEY?: string;
   DISCORD_WEBHOOK_URL?: string;
   VAPID_PUBLIC_KEY?: string;

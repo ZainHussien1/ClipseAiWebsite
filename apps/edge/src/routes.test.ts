@@ -75,7 +75,7 @@ describe('Phase 3 API routes (sources, feed, live, rising, claims)', () => {
       '..',
       'migrations',
     );
-    for (const file of ['0001_init.sql', '0002_ingestion.sql', '0003_phase3.sql', '0004_phase4.sql', '0005_phase5.sql', '0006_v2_upgrade.sql', '0007_v3_board.sql']) {
+    for (const file of ['0001_init.sql', '0002_ingestion.sql', '0003_phase3.sql', '0004_phase4.sql', '0005_phase5.sql', '0006_v2_upgrade.sql', '0007_v3_board.sql', '0008_v4_alerts.sql']) {
       sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
     }
 

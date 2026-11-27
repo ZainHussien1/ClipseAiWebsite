@@ -12,6 +12,9 @@ import {
   type NotifyDeliveryResult,
   type NotifyQueueMessage,
 } from '@clipse/core';
+import { recordAlertDelivery } from './digest.js';
+
+export * from './digest.js';
 
 export interface NotifyEnv {
   DB: D1Database;
@@ -357,6 +360,28 @@ export async function processNotifyBatch(
 
       if (decision.deliverInApp) {
         await insertNotificationRow(db, msg, decision.tier, 'in_app', nowIso);
+        await recordAlertDelivery(db, {
+          id: `deliv:in_app:${msg.idempotencyKey}`,
+          workspaceId: msg.workspaceId,
+          alertId: msg.alertId,
+          channel: 'in_app',
+          status: 'delivered',
+          reason: null,
+          attemptedAt: nowIso,
+          deliveredAt: nowIso,
+        });
+      }
+
+      if (decision.suppressedReasons.length > 0) {
+        await recordAlertDelivery(db, {
+          id: `deliv:suppressed:${msg.idempotencyKey}`,
+          workspaceId: msg.workspaceId,
+          alertId: msg.alertId,
+          channel: 'discord',
+          status: 'suppressed',
+          reason: decision.suppressedReasons.join(','),
+          attemptedAt: nowIso,
+        });
       }
 
       if (decision.deliverDiscord) {
@@ -364,12 +389,41 @@ export async function processNotifyBatch(
         if (webhookUrl) {
           const res = await sendDiscordWebhook(webhookUrl, msg, fetchImpl);
           if (res.statusCode === 429 && res.retryAfterSeconds) {
+            await recordAlertDelivery(db, {
+              id: `deliv:discord-429:${msg.idempotencyKey}`,
+              workspaceId: msg.workspaceId,
+              alertId: msg.alertId,
+              channel: 'discord',
+              status: 'failed',
+              reason: `429 Retry-After ${res.retryAfterSeconds}s`,
+              attemptedAt: nowIso,
+            });
             failed += 1;
             maxRetryAfter = Math.max(maxRetryAfter ?? 0, res.retryAfterSeconds);
             continue;
           }
           if (res.delivered) {
             await insertNotificationRow(db, msg, decision.tier, 'discord', nowIso);
+            await recordAlertDelivery(db, {
+              id: `deliv:discord:${msg.idempotencyKey}`,
+              workspaceId: msg.workspaceId,
+              alertId: msg.alertId,
+              channel: 'discord',
+              status: 'delivered',
+              reason: null,
+              attemptedAt: nowIso,
+              deliveredAt: nowIso,
+            });
+          } else {
+            await recordAlertDelivery(db, {
+              id: `deliv:discord-fail:${msg.idempotencyKey}`,
+              workspaceId: msg.workspaceId,
+              alertId: msg.alertId,
+              channel: 'discord',
+              status: 'failed',
+              reason: `HTTP ${res.statusCode ?? 'error'}`,
+              attemptedAt: nowIso,
+            });
           }
         }
       }
@@ -385,6 +439,16 @@ export async function processNotifyBatch(
           const pushRes = await sendWebPush(sub, env, fetchImpl);
           if (pushRes.delivered) {
             await insertNotificationRow(db, msg, decision.tier, 'webpush', nowIso);
+            await recordAlertDelivery(db, {
+              id: `deliv:webpush:${msg.idempotencyKey}:${sub.id}`,
+              workspaceId: msg.workspaceId,
+              alertId: msg.alertId,
+              channel: 'webpush',
+              status: 'delivered',
+              reason: null,
+              attemptedAt: nowIso,
+              deliveredAt: nowIso,
+            });
           }
         }
       }

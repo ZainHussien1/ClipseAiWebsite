@@ -1,5 +1,4 @@
 import {
-  evaluateRising,
   resolveYouTubeChannelPublic,
   TokenBucketQuotaGovernor,
   YouTubeProvider,
@@ -8,14 +7,21 @@ import {
   type Platform,
   type ProviderItem,
   type ProviderItemStats,
-  type RisingBaselineSample,
 } from '@clipse/core';
 import { processIngestBatch } from './ingest.js';
 import { syncKickAccount, syncTwitchAccount } from './provider-sync.js';
+import { evaluateAndDispatchRisingAlerts } from './rising-pipeline.js';
 import type { FetchLike } from '@clipse/core';
 
 export interface SyncEnv {
   readonly DB: D1Database;
+  readonly ENVIRONMENT?: string;
+  readonly NOTIFY_QUEUE?: Queue;
+  readonly WEBHOOK_ENCRYPTION_KEY?: string;
+  readonly DISCORD_WEBHOOK_URL?: string;
+  readonly VAPID_PUBLIC_KEY?: string;
+  readonly VAPID_PRIVATE_KEY?: string;
+  readonly VAPID_SUBJECT?: string;
   readonly YOUTUBE_API_KEY?: string;
   readonly TWITCH_CLIENT_ID?: string;
   readonly TWITCH_CLIENT_SECRET?: string;
@@ -144,15 +150,16 @@ async function syncYouTubeAccount(
   }
 
   for (const stat of stats) {
+    const capturedAt = deps.nowIso ?? stat.capturedAt;
     messages.push({
       type: 'record_stats',
-      idempotencyKey: `sync-stat:youtube:${stat.externalId}:${stat.capturedAt}`,
+      idempotencyKey: `sync-stat:youtube:${stat.externalId}:${capturedAt}`,
       source: 'reconcile',
       receivedAt: nowIso,
       stats: {
         platform: 'youtube',
         externalId: stat.externalId,
-        capturedAt: stat.capturedAt,
+        capturedAt,
         views: stat.views,
         likes: stat.likes,
         comments: stat.comments,
@@ -179,7 +186,14 @@ async function syncYouTubeAccount(
   }
 
   if (!isInitialBackfill) {
-    await evaluateAndRecordRisingAlerts(db, channelId, externalId, items, stats, nowIso);
+    await evaluateAndDispatchRisingAlerts(
+      db,
+      { ...env, ENVIRONMENT: env.ENVIRONMENT ?? 'local' },
+      channelId,
+      externalId,
+      items,
+      nowIso,
+    );
   }
 
   return {
@@ -190,131 +204,6 @@ async function syncYouTubeAccount(
     resolvedExternalId: channelId,
     message: `Synced ${items.length} YouTube items for ${channelName}`,
   };
-}
-
-async function evaluateAndRecordRisingAlerts(
-  db: D1Database,
-  channelId: string,
-  originalExternalId: string,
-  items: readonly ProviderItem[],
-  stats: readonly ProviderItemStats[],
-  nowIso: string,
-): Promise<void> {
-  if (items.length === 0 || stats.length === 0) return;
-
-  const followers = await db
-    .prepare(
-      `SELECT DISTINCT f.workspace_id
-       FROM follows f
-       INNER JOIN platform_accounts a ON a.id = f.account_id
-       WHERE a.platform = 'youtube' AND (a.external_id = ? OR a.external_id = ?)`,
-    )
-    .bind(channelId, originalExternalId)
-    .all<{ workspace_id: string }>();
-
-  const workspaceIds = (followers.results ?? []).map((r) => r.workspace_id);
-  if (workspaceIds.length === 0) return;
-
-  const nowMs = Date.parse(nowIso);
-  const sevenDaysAgoIso = new Date(nowMs - 7 * 86_400_000).toISOString();
-  const baselineRes = await db
-    .prepare(
-      `SELECT i.published_at, s.views, s.likes, s.comments
-       FROM items i
-       INNER JOIN platform_accounts a ON a.id = i.account_id
-       INNER JOIN item_stats s ON s.item_id = i.id
-       WHERE a.platform = 'youtube'
-         AND a.external_id = ?
-         AND i.published_at < ?
-       ORDER BY i.published_at DESC
-       LIMIT 20`,
-    )
-    .bind(channelId, sevenDaysAgoIso)
-    .all<{
-      published_at: string;
-      views: number;
-      likes: number | null;
-      comments: number | null;
-    }>();
-
-  const baselineRows = baselineRes.results ?? [];
-  if (baselineRows.length < 5) {
-    // F-01: Do not fire Rising alerts until >=5 historical (>7d) baseline items exist
-    return;
-  }
-
-  const baseline: RisingBaselineSample[] = baselineRows.map((r) => {
-    const itemAgeHours = Math.max(1, (nowMs - Date.parse(r.published_at)) / 3_600_000);
-    const hasEng = r.likes !== null || r.comments !== null;
-    return {
-      viewsPerHour: r.views / itemAgeHours,
-      engagementRate:
-        hasEng && r.views > 0
-          ? ((r.likes ?? 0) + (r.comments ?? 0)) / r.views
-          : null,
-    };
-  });
-
-  const statsByExternalId = new Map(stats.map((s) => [s.externalId, s]));
-
-  for (const item of items) {
-    const stat = statsByExternalId.get(item.externalId);
-    if (!stat) continue;
-    const ageHours = Math.max(0.25, (nowMs - Date.parse(item.publishedAt)) / 3_600_000);
-    if (ageHours > 72) continue;
-
-    const evalResult = evaluateRising({
-      ageHours,
-      views: stat.views,
-      likes: stat.likes ?? null,
-      comments: stat.comments ?? null,
-      creatorBaseline: baseline,
-    });
-
-    if (evalResult.tier === 'none') continue;
-
-    const itemId = `item:youtube:${item.externalId}`;
-    for (const workspaceId of workspaceIds) {
-      const alertId = `alert:${workspaceId}:${itemId}:${evalResult.tier}`;
-      const existing = await db
-        .prepare('SELECT id FROM alerts WHERE workspace_id = ? AND item_id = ? AND type = ? LIMIT 1')
-        .bind(workspaceId, itemId, evalResult.tier)
-        .first<{ id: string }>();
-      if (existing) continue;
-
-      const confidence =
-        evalResult.tier === 'viral' ? 'high' : evalResult.tier === 'breakout' ? 'medium' : 'low';
-      await db
-        .prepare(
-          `INSERT INTO alerts (id, workspace_id, item_id, type, confidence, score, reason, evidence_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          alertId,
-          workspaceId,
-          itemId,
-          evalResult.tier,
-          confidence,
-          evalResult.score,
-          evalResult.reason,
-          JSON.stringify({
-            velocityRatio: evalResult.velocityRatio,
-            engagementRatio: evalResult.engagementRatio,
-            usedColdStart: evalResult.usedColdStart,
-          }),
-          nowIso,
-        )
-        .run();
-
-      await db
-        .prepare(
-          `INSERT INTO alert_deliveries (id, workspace_id, alert_id, channel, status, reason, attempted_at)
-           VALUES (?, ?, ?, 'in_app', 'recorded', ?, ?)`,
-        )
-        .bind(`deliv:${alertId}`, workspaceId, alertId, evalResult.reason, nowIso)
-        .run();
-    }
-  }
 }
 
 export async function syncPlatformAccount(

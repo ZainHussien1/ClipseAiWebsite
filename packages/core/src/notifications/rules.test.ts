@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   escapeDiscordMarkdown,
   evaluateNotification,
+  filterOnShiftRecipients,
+  isMemberOnShift,
   isWithinQuietHours,
   resolveAlertTier,
   validateDiscordWebhookUrl,
@@ -146,5 +148,44 @@ describe('validateDiscordWebhookUrl & escapeDiscordMarkdown', () => {
     expect(escaped).toContain('<@&\u200b12345\\>');
     expect(escaped).toContain('\\*\\*bold\\*\\*');
     expect(escaped).not.toContain('\x00');
+  });
+});
+
+describe('on-shift routing', () => {
+  it('evaluates member availability in member timezone and routes P1 on-shift first with all-member fallback', () => {
+    // 2026-11-26 is Thursday (day 4). 15:00Z = 10:00 America/New_York
+    const nowIso = '2026-11-26T15:00:00Z';
+    const nySchedule = JSON.stringify({
+      timezone: 'America/New_York',
+      schedule: [{ day: 4, startHour: 9, endHour: 17, enabled: true }],
+    });
+    const tokyoSchedule = JSON.stringify({
+      timezone: 'Asia/Tokyo',
+      // 15:00Z = 00:00 Friday (day 5) in Tokyo -> off shift for 9..17
+      schedule: [{ day: 5, startHour: 9, endHour: 17, enabled: true }],
+    });
+
+    expect(isMemberOnShift(nySchedule, 'America/New_York', nowIso)).toBe(true);
+    expect(isMemberOnShift(tokyoSchedule, 'Asia/Tokyo', nowIso)).toBe(false);
+    expect(isMemberOnShift('{}', 'UTC', nowIso)).toBe(true);
+
+    const routed = filterOnShiftRecipients(
+      [
+        { userId: 'u-ny', availabilityJson: nySchedule, timezone: 'America/New_York' },
+        { userId: 'u-tk', availabilityJson: tokyoSchedule, timezone: 'Asia/Tokyo' },
+      ],
+      nowIso,
+    );
+    expect(routed.usedFallback).toBe(false);
+    expect(routed.primaryRecipients.map((m) => m.userId)).toEqual(['u-ny']);
+    expect(routed.offShiftRecipients.map((m) => m.userId)).toEqual(['u-tk']);
+
+    const fallback = filterOnShiftRecipients(
+      [{ userId: 'u-tk', availabilityJson: tokyoSchedule, timezone: 'Asia/Tokyo' }],
+      nowIso,
+    );
+    expect(fallback.usedFallback).toBe(true);
+    expect(fallback.primaryRecipients.map((m) => m.userId)).toEqual(['u-tk']);
+    expect(fallback.offShiftRecipients).toEqual([]);
   });
 });

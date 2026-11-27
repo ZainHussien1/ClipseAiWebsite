@@ -152,6 +152,52 @@ describe('evaluateLiveMoment', () => {
     expect(res.detected).toBe(false);
     expect(res.inCooldown).toBe(true);
   });
+
+  it('suppresses raid-only and single-jump raid viewer spikes unless clip or chat burst accompanies them', () => {
+    const start = '2026-11-26T10:00:00Z';
+    // Sudden single-step raid jump 200 -> 900, then flat/decaying 880
+    const raidCounts = [200, 200, 200, 200, 200, 200, 200, 200, 900, 880];
+    const raidSamples = makeViewerSeries(start, raidCounts);
+    const evalTime = lastSampleTime(raidSamples);
+
+    const singleJump = evaluateLiveMoment({
+      platform: 'twitch',
+      isLive: true,
+      streamStartedAt: start,
+      evaluatedAt: evalTime,
+      viewerSamples: raidSamples,
+      recentClips: [],
+    });
+    expect(singleJump.detected).toBe(false);
+    expect(singleJump.raidGuarded).toBe(true);
+    expect(singleJump.evidence).toContain('Raid-style viewer jump suppressed');
+
+    // Explicit isRaidOnly flag suppresses viewer spike even with upward slope
+    const organicCounts = [200, 200, 200, 200, 200, 200, 200, 260, 330, 410];
+    const organicSamples = makeViewerSeries(start, organicCounts);
+    const explicitRaid = evaluateLiveMoment({
+      platform: 'twitch',
+      isLive: true,
+      streamStartedAt: start,
+      evaluatedAt: lastSampleTime(organicSamples),
+      viewerSamples: organicSamples,
+      isRaidOnly: true,
+      recentClips: [],
+    });
+    expect(explicitRaid.detected).toBe(false);
+    expect(explicitRaid.raidGuarded).toBe(true);
+
+    // Organic multi-sample acceleration without raid fires cleanly
+    const organicLive = evaluateLiveMoment({
+      platform: 'kick',
+      isLive: true,
+      streamStartedAt: start,
+      evaluatedAt: lastSampleTime(organicSamples),
+      viewerSamples: organicSamples,
+    });
+    expect(organicLive.detected).toBe(true);
+    expect(organicLive.raidGuarded).toBe(false);
+  });
 });
 
 describe('evaluateVodReady & shouldEscalateUnclaimed', () => {

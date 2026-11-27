@@ -23,6 +23,8 @@ export interface LiveMomentInput {
   readonly recentClips?: readonly LiveClipSample[];
   readonly usualClipsPerWindow?: number | null;
   readonly lastAlertAt?: string | null;
+  readonly isRaidOnly?: boolean;
+  readonly chatBurstDetected?: boolean;
 }
 
 export interface LiveMomentConfig {
@@ -66,6 +68,7 @@ export type StreamOffsetKind = 'exact' | 'approx';
 export interface LiveMomentEvaluation {
   readonly detected: boolean;
   readonly inCooldown: boolean;
+  readonly raidGuarded: boolean;
   readonly confidence: AlertConfidence | null;
   readonly score: number;
   readonly signalCapability: SignalCapability;
@@ -90,12 +93,39 @@ function formatOffsetLabel(seconds: number, kind: StreamOffsetKind): string {
   return kind === 'exact' ? `vod_offset ${formatted}` : `approx. ${formatted}`;
 }
 
+function isSingleJumpRaidPattern(
+  sorted: ReadonlyArray<{ ts: number; viewers: number }>,
+  baselineViewers: number,
+  sustainedCount: number,
+): boolean {
+  if (sorted.length < sustainedCount + 1) return false;
+  const tail = sorted.slice(-(sustainedCount + 1));
+  const latest = tail[tail.length - 1];
+  const prev = tail[tail.length - 2];
+  if (!latest || !prev) return false;
+
+  const totalGain = latest.viewers - baselineViewers;
+  if (totalGain <= 0) return false;
+
+  let maxStepJump = 0;
+  for (let i = 1; i < tail.length; i += 1) {
+    const jump = (tail[i]?.viewers ?? 0) - (tail[i - 1]?.viewers ?? 0);
+    if (jump > maxStepJump) maxStepJump = jump;
+  }
+
+  const singleStepDominant = maxStepJump / totalGain >= 0.8;
+  const continuedGrowth = latest.viewers - prev.viewers;
+  const plateauOrDecay = continuedGrowth < Math.max(5, totalGain * 0.03);
+  return singleStepDominant && plateauOrDecay;
+}
+
 function evaluateViewerSpike(
   input: LiveMomentInput,
   evalMs: number,
   config: LiveMomentConfig,
 ): {
   strength: SignalStrength;
+  singleJumpRaid: boolean;
   baselineViewers: number;
   currentViewers: number;
   gain: number;
@@ -107,7 +137,14 @@ function evaluateViewerSpike(
     .sort((a, b) => a.ts - b.ts);
 
   if (sorted.length === 0) {
-    return { strength: 'none', baselineViewers: 0, currentViewers: 0, gain: 0, gainPct: 0 };
+    return {
+      strength: 'none',
+      singleJumpRaid: false,
+      baselineViewers: 0,
+      currentViewers: 0,
+      gain: 0,
+      gainPct: 0,
+    };
   }
 
   const currentViewers = sorted[sorted.length - 1]?.viewers ?? 0;
@@ -121,6 +158,7 @@ function evaluateViewerSpike(
   if (baselineSamples.length < config.minBaselineSamples) {
     return {
       strength: 'none',
+      singleJumpRaid: false,
       baselineViewers: median(baselineSamples),
       currentViewers,
       gain: 0,
@@ -134,7 +172,14 @@ function evaluateViewerSpike(
 
   const recentSamples = sorted.slice(-config.sustainedSampleCount);
   if (recentSamples.length < config.sustainedSampleCount) {
-    return { strength: 'none', baselineViewers, currentViewers, gain, gainPct };
+    return {
+      strength: 'none',
+      singleJumpRaid: false,
+      baselineViewers,
+      currentViewers,
+      gain,
+      gainPct,
+    };
   }
 
   const minSustained = Math.min(...recentSamples.map((s) => s.viewers));
@@ -150,7 +195,11 @@ function evaluateViewerSpike(
     }
   }
 
-  return { strength, baselineViewers, currentViewers, gain, gainPct };
+  const singleJumpRaid =
+    strength !== 'none' &&
+    isSingleJumpRaidPattern(sorted, baselineViewers, config.sustainedSampleCount);
+
+  return { strength, singleJumpRaid, baselineViewers, currentViewers, gain, gainPct };
 }
 
 function evaluateClipVelocity(
@@ -288,6 +337,7 @@ export function evaluateLiveMoment(
     return {
       detected: false,
       inCooldown: false,
+      raidGuarded: false,
       confidence: null,
       score: 0,
       signalCapability: capability,
@@ -311,6 +361,7 @@ export function evaluateLiveMoment(
       return {
         detected: false,
         inCooldown: true,
+        raidGuarded: false,
         confidence: null,
         score: 0,
         signalCapability: capability,
@@ -331,18 +382,29 @@ export function evaluateLiveMoment(
 
   const viewer = evaluateViewerSpike(input, evalMs, config);
   const clip = evaluateClipVelocity(input, evalMs, config);
-  const confidence = resolveConfidence(viewer.strength, clip.strength);
+  const hasBurst = clip.strength !== 'none' || Boolean(input.chatBurstDetected);
+  const raidGuarded =
+    Boolean(input.isRaidOnly && viewer.strength !== 'none') ||
+    (viewer.strength !== 'none' && viewer.singleJumpRaid && !hasBurst);
+  const effectiveViewerStrength: SignalStrength = raidGuarded ? 'none' : viewer.strength;
+  const confidence = resolveConfidence(effectiveViewerStrength, clip.strength);
 
   const signalPoints: Record<SignalStrength, number> = { none: 0, weak: 1, strong: 2 };
-  const score = signalPoints[viewer.strength] + signalPoints[clip.strength];
+  const score = signalPoints[effectiveViewerStrength] + signalPoints[clip.strength];
+  const effectiveViewer = { ...viewer, strength: effectiveViewerStrength };
+  const evidence =
+    raidGuarded && confidence === null
+      ? 'Raid-style viewer jump suppressed (requires organic acceleration or clip/chat burst)'
+      : buildEvidenceString(capability, effectiveViewer, clip, config);
 
   return {
     detected: confidence !== null,
     inCooldown: false,
+    raidGuarded,
     confidence,
     score,
     signalCapability: capability,
-    viewerSignal: viewer.strength,
+    viewerSignal: effectiveViewerStrength,
     clipSignal: clip.strength,
     baselineViewers: viewer.baselineViewers,
     currentViewers: viewer.currentViewers,
@@ -352,7 +414,7 @@ export function evaluateLiveMoment(
     distinctClipCreators: clip.distinctCreators,
     offsetSeconds: clip.offsetSeconds,
     offsetKind: clip.offsetKind,
-    evidence: buildEvidenceString(capability, viewer, clip, config),
+    evidence,
   };
 }
 

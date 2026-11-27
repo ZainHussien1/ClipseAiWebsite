@@ -6,3 +6,4 @@ export * from './providers/index.js';
 export * from './scoring/index.js';
 export * from './types.js';
 export * from './v3-schemas.js';
+export * from './v4-schemas.js';

@@ -215,6 +215,17 @@ export const risingItemSchema = z.object({
   publishedAt: z.string(),
   isBackfill: z.boolean(),
   tier: risingTierSchema.exclude(['none']),
+  paceLabel: z
+    .enum([
+      'Normal pace',
+      'Rising',
+      'Breakout',
+      'Viral',
+      'Unscored — collecting baseline',
+    ])
+    .optional(),
+  baselineN: z.number().int().nonnegative().optional(),
+  baselineRequired: z.number().int().positive().optional(),
   score: z.number(),
   velocityRatio: z.number(),
   engagementRatio: z.number().nullable(),
@@ -313,6 +324,21 @@ export const alertItemSchema = z.object({
   evidence: z.record(z.unknown()),
   userVote: z.boolean().nullable(),
   remindedAt: z.string().nullable(),
+  acknowledgedAt: z.string().nullable().optional(),
+  claimedBy: z.string().nullable().optional(),
+  deliveries: z
+    .array(
+      z.object({
+        id: z.string(),
+        alertId: z.string().nullable(),
+        channel: z.string(),
+        status: z.enum(['detected', 'queued', 'delivered', 'suppressed', 'failed']),
+        reason: z.string().nullable(),
+        attemptedAt: z.string(),
+        deliveredAt: z.string().nullable(),
+      }),
+    )
+    .optional(),
   createdAt: z.string(),
   source: z.string(),
   ageSeconds: z.number().int().nonnegative(),
@@ -345,8 +371,31 @@ export const notificationPrefsSchema = z
     hourlyBudget: z.number().int().min(1).max(100).default(10),
     quietStartHour: z.number().int().min(0).max(23).nullable().default(null),
     quietEndHour: z.number().int().min(0).max(23).nullable().default(null),
-    timezone: z.string().trim().min(1).max(64).default('UTC'),
+    timezone: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .refine((tz) => {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: tz });
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'Must be a valid IANA timezone')
+      .default('UTC'),
     snoozeUntil: z.string().datetime().nullable().default(null),
+    discordDailyDigest: z.boolean().optional(),
+    rules: z
+      .record(
+        z.enum(['rising', 'breakout', 'viral', 'live_moment', 'vod_ready']),
+        z.object({
+          tier: notificationTierSchema,
+          channels: z.array(notificationChannelSchema),
+        }),
+      )
+      .optional(),
   })
   .refine(
     (v) =>

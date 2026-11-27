@@ -61,6 +61,7 @@ describe('V3 Discover, Mission Control, Saved Views, and Kanban Work Board', () 
       '0005_phase5.sql',
       '0006_v2_upgrade.sql',
       '0007_v3_board.sql',
+      '0008_v4_alerts.sql',
     ]) {
       sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
     }

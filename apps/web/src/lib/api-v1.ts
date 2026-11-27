@@ -1,6 +1,7 @@
 import { extractApiErrorMessage } from './api';
 import type {
   ActiveRisingTier,
+  AlertDeliveryRecord,
   AlertItem,
   ClaimRecord,
   ClaimStatus,
@@ -16,6 +17,7 @@ import type {
   ItemDetail,
   ItemKind,
   LiveResponse,
+  MemberAvailability,
   MissionControlData,
   NotificationPrefs,
   NotificationRecord,
@@ -277,6 +279,49 @@ export async function voteAlert(alertId: string, useful: boolean): Promise<{ ok:
   return requestJson<{ ok: boolean }>(`/api/v1/alerts/${encodeURIComponent(alertId)}/vote`, {
     method: 'POST',
     body: JSON.stringify({ useful }),
+  });
+}
+
+export async function acknowledgeAlert(
+  alertId: string,
+  note?: string,
+): Promise<{ ok: boolean; acknowledgedAt?: string }> {
+  return requestJson<{ ok: boolean; acknowledgedAt?: string }>(
+    `/api/v1/alerts/${encodeURIComponent(alertId)}/acknowledge`,
+    {
+      method: 'POST',
+      body: JSON.stringify(note ? { note } : {}),
+    },
+  );
+}
+
+export async function listNotificationDeliveries(): Promise<AlertDeliveryRecord[]> {
+  const data = await requestJson<
+    { deliveries?: AlertDeliveryRecord[]; items?: AlertDeliveryRecord[] } | AlertDeliveryRecord[]
+  >('/api/v1/notifications/deliveries');
+  if (Array.isArray(data)) return data;
+  return data.deliveries ?? data.items ?? [];
+}
+
+export async function sendTestNotification(
+  channel: 'discord' | 'in_app' | 'webpush',
+): Promise<{ ok: boolean; status?: string; detail?: string; message?: string }> {
+  return requestJson('/api/v1/notifications/test', {
+    method: 'POST',
+    body: JSON.stringify({ channel }),
+  });
+}
+
+export async function fetchMemberAvailability(): Promise<MemberAvailability> {
+  return requestJson<MemberAvailability>('/api/v1/settings/availability');
+}
+
+export async function updateMemberAvailability(
+  payload: MemberAvailability,
+): Promise<MemberAvailability> {
+  return requestJson<MemberAvailability>('/api/v1/settings/availability', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
   });
 }
 

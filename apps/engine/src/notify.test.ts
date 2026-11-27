@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { NotifyQueueMessage } from '@clipse/core';
 import {
   buildDiscordWebhookPayload,
+  formatDiscordDailyDigestEmbed,
   processNotifyBatch,
   processUnclaimedEscalations,
+  sendDiscordDailyDigest,
   sendDiscordWebhook,
   type NotifyEnv,
 } from './notify.js';
@@ -26,6 +28,7 @@ function createNotifyMockDb(options?: {
   }>;
 }) {
   const insertedNotifications: Array<{ id: string; channel: string; tier: string }> = [];
+  const deliveryLogs: Array<{ id: string; channel: string; status: string; reason: string | null }> = [];
   const remindedAlerts = new Set<string>();
 
   const db = {
@@ -72,6 +75,15 @@ function createNotifyMockDb(options?: {
                 }
                 return { success: true, meta: { changes: 1 } };
               }
+              if (sql.includes('INSERT OR IGNORE INTO alert_deliveries')) {
+                deliveryLogs.push({
+                  id: String(args[0]),
+                  channel: String(args[3]),
+                  status: String(args[4]),
+                  reason: args[5] ? String(args[5]) : null,
+                });
+                return { success: true, meta: { changes: 1 } };
+              }
               if (sql.includes('UPDATE alerts SET reminded_at = ?')) {
                 const alertId = String(args[1]);
                 if (remindedAlerts.has(alertId)) {
@@ -95,7 +107,7 @@ function createNotifyMockDb(options?: {
     },
   } as unknown as D1Database;
 
-  return { db, insertedNotifications, remindedAlerts };
+  return { db, insertedNotifications, deliveryLogs, remindedAlerts };
 }
 
 const baseMsg: NotifyQueueMessage = {
@@ -146,7 +158,7 @@ describe('engine notify consumer', () => {
 
   it('suppresses Discord delivery on hourly budget exhaustion and quiet hours while saving in-app', async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
-    const { db, insertedNotifications } = createNotifyMockDb({
+    const { db, insertedNotifications, deliveryLogs } = createNotifyMockDb({
       hourlyBudget: 3,
       sentLastHour: 3,
       quietStartHour: 11,
@@ -168,6 +180,16 @@ describe('engine notify consumer', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(insertedNotifications).toHaveLength(1);
     expect(insertedNotifications[0]?.channel).toBe('in_app');
+    expect(deliveryLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ channel: 'in_app', status: 'delivered' }),
+        expect.objectContaining({
+          channel: 'discord',
+          status: 'suppressed',
+          reason: 'quiet_hours,hourly_budget_exceeded',
+        }),
+      ]),
+    );
   });
 
   it('sends unclaimed escalation reminder at most once', async () => {
@@ -210,5 +232,48 @@ describe('engine notify consumer', () => {
     expect(second).toBe(0);
     expect(remindedAlerts.has('alert-esc-1')).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('formats and sends Discord Daily Digest with mention escaping and 429 Retry-After', async () => {
+    const embed = formatDiscordDailyDigestEmbed({
+      workspaceName: 'Team @everyone',
+      dateLabel: '2026-11-26',
+      totalAlerts: 4,
+      claimedCount: 3,
+      clippedCount: 2,
+      topItems: [
+        {
+          creatorName: 'Streamer @here',
+          title: 'Big Clutch <@&123>',
+          tierLabel: 'Breakout',
+          reason: '3.2x usual',
+          url: 'https://www.youtube.com/watch?v=abc',
+        },
+      ],
+      dashboardUrl: 'https://radar.example/reports',
+    }) as { allowed_mentions: { parse: string[] }; embeds: Array<{ title: string; description: string }> };
+
+    expect(embed.allowed_mentions).toEqual({ parse: [] });
+    expect(embed.embeds[0]?.title).not.toContain('@everyone');
+    expect(embed.embeds[0]?.description).not.toContain('@here');
+
+    const rateLimitedFetch = vi.fn(
+      async () => new Response('slow down', { status: 429, headers: { 'Retry-After': '9' } }),
+    );
+    const res = await sendDiscordDailyDigest(
+      'https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz123456',
+      {
+        workspaceName: 'Team',
+        dateLabel: '2026-11-26',
+        totalAlerts: 0,
+        claimedCount: 0,
+        clippedCount: 0,
+        topItems: [],
+      },
+      rateLimitedFetch as unknown as typeof fetch,
+    );
+    expect(res.delivered).toBe(false);
+    expect(res.statusCode).toBe(429);
+    expect(res.retryAfterSeconds).toBe(9);
   });
 });

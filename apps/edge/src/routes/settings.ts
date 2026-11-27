@@ -3,7 +3,9 @@ import {
   AppError,
   exportFormatSchema,
   hasRoleAtLeast,
+  memberAvailabilitySchema,
   memberUpdateSchema,
+  type MemberAvailability,
   type Role,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
@@ -142,6 +144,64 @@ export function createSettingsRouter() {
       .run();
 
     return c.json({ deleted: true, userId: targetUserId });
+  });
+
+  router.get('/settings/availability', async (c) => {
+    const principal = c.get('principal');
+    const row = await c.env.DB.prepare(
+      'SELECT timezone, availability_json FROM memberships WHERE workspace_id = ? AND user_id = ?',
+    )
+      .bind(principal.workspaceId, principal.userId)
+      .first<{ timezone: string; availability_json: string }>();
+
+    let availability: MemberAvailability = { timezone: row?.timezone ?? 'UTC', schedule: [] };
+    if (row?.availability_json) {
+      try {
+        const parsed = memberAvailabilitySchema.safeParse({
+          timezone: row.timezone,
+          schedule: JSON.parse(row.availability_json),
+        });
+        if (parsed.success) {
+          availability = parsed.data;
+        }
+      } catch {
+        // default empty schedule
+      }
+    }
+
+    return c.json({
+      availability,
+      source: 'Workspace Membership',
+      asOf: new Date().toISOString(),
+    });
+  });
+
+  router.put('/settings/availability', async (c) => {
+    const principal = c.get('principal');
+    requireWriterRole(principal);
+    const body = memberAvailabilitySchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!body.success) {
+      throw AppError.badRequest('Invalid availability schedule', body.error.flatten());
+    }
+
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      `UPDATE memberships
+       SET timezone = ?, availability_json = ?, updated_at = ?
+       WHERE workspace_id = ? AND user_id = ?`,
+    )
+      .bind(
+        body.data.timezone,
+        JSON.stringify(body.data.schedule),
+        now,
+        principal.workspaceId,
+        principal.userId,
+      )
+      .run();
+
+    return c.json({ ok: true, availability: body.data });
   });
 
   router.post('/export', async (c) => {

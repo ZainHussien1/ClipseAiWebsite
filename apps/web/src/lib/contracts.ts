@@ -169,6 +169,13 @@ export interface LiveResponse {
   asOf: string;
 }
 
+export type PaceLabel =
+  | 'Normal pace'
+  | 'Rising'
+  | 'Breakout'
+  | 'Viral'
+  | 'Unscored — collecting baseline';
+
 export interface RisingItem {
   itemId: string;
   accountId: string;
@@ -183,6 +190,9 @@ export interface RisingItem {
   publishedAt: string;
   isBackfill: boolean;
   tier: ActiveRisingTier;
+  paceLabel?: PaceLabel;
+  baselineN?: number;
+  baselineRequired?: number;
   score: number;
   velocityRatio: number;
   engagementRatio: number | null;
@@ -296,6 +306,23 @@ export interface MissionControlData {
   asOf: string;
 }
 
+export type AlertDeliveryStatus =
+  | 'detected'
+  | 'queued'
+  | 'delivered'
+  | 'suppressed'
+  | 'failed';
+
+export interface AlertDeliveryRecord {
+  id: string;
+  alertId: string | null;
+  channel: string;
+  status: AlertDeliveryStatus;
+  reason: string | null;
+  attemptedAt: string;
+  deliveredAt: string | null;
+}
+
 export interface AlertItem {
   id: string;
   itemId: string;
@@ -311,6 +338,9 @@ export interface AlertItem {
   evidence: Record<string, unknown>;
   userVote: boolean | null;
   remindedAt: string | null;
+  acknowledgedAt?: string | null;
+  claimedBy?: string | null;
+  deliveries?: AlertDeliveryRecord[];
   createdAt: string;
   source: string;
   ageSeconds: number;
@@ -330,12 +360,31 @@ export interface NotificationRecord {
   createdAt: string;
 }
 
+export type AlertRulesMap = Record<
+  AlertType,
+  { tier: NotificationTier; channels: NotificationChannel[] }
+>;
+
 export interface NotificationPrefs {
   hourlyBudget: number;
   quietStartHour: number | null;
   quietEndHour: number | null;
   timezone: string;
   snoozeUntil: string | null;
+  discordDailyDigest?: boolean;
+  rules?: AlertRulesMap;
+}
+
+export interface MemberAvailabilityWindow {
+  day: number;
+  startHour: number;
+  endHour: number;
+  enabled: boolean;
+}
+
+export interface MemberAvailability {
+  timezone: string;
+  schedule: MemberAvailabilityWindow[];
 }
 
 export interface PushSubscriptionInput {

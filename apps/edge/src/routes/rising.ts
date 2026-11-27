@@ -6,9 +6,12 @@ import {
   normalizeHandle,
   risingQuerySchema,
   type ItemClaimInfo,
+  type PaceLabel,
   type RisingItem,
 } from '@clipse/core';
 import type { EdgeBindings, EdgeVariables } from '../app.js';
+
+const BASELINE_REQUIRED = 5;
 
 interface RisingRow {
   item_id: string;
@@ -36,21 +39,34 @@ interface RisingRow {
 function parseEvidence(raw: string): {
   velocityRatio: number;
   engagementRatio: number | null;
+  baselineN?: number;
 } {
   try {
     const parsed = JSON.parse(raw) as {
       velocityRatio?: unknown;
       engagementRatio?: unknown;
+      baselineN?: unknown;
     };
     return {
       velocityRatio:
         typeof parsed.velocityRatio === 'number' ? parsed.velocityRatio : 0,
       engagementRatio:
         typeof parsed.engagementRatio === 'number' ? parsed.engagementRatio : null,
+      baselineN:
+        typeof parsed.baselineN === 'number' ? parsed.baselineN : undefined,
     };
   } catch {
     return { velocityRatio: 0, engagementRatio: null };
   }
+}
+
+function toPaceLabel(tier: 'rising' | 'breakout' | 'viral', baselineN: number): PaceLabel {
+  if (baselineN < BASELINE_REQUIRED) {
+    return 'Unscored — collecting baseline';
+  }
+  if (tier === 'viral') return 'Viral';
+  if (tier === 'breakout') return 'Breakout';
+  return 'Rising';
 }
 
 export function createRisingRouter() {
@@ -95,9 +111,9 @@ export function createRisingRouter() {
         `SELECT al.item_id, i.account_id, a.handle AS account_handle, a.display_name AS account_display_name,
                 i.platform, i.external_id, i.kind, i.title, i.url, i.thumbnail_url, i.published_at,
                 i.is_backfill, al.type, al.score, al.reason, al.evidence_json, al.created_at,
-                (SELECT cl.id FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipped') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_id,
-                (SELECT cl.status FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipped') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_status,
-                (SELECT cl.user_id FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipped') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_user_id
+                (SELECT cl.id FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipping', 'Clipped', 'Published') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_id,
+                (SELECT cl.status FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipping', 'Clipped', 'Published') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_status,
+                (SELECT cl.user_id FROM claims cl WHERE cl.workspace_id = ? AND cl.item_id = i.id AND cl.status IN ('New', 'Claimed', 'Clipping', 'Clipped', 'Published') ORDER BY cl.updated_at DESC LIMIT 1) AS claim_user_id
          FROM alerts al
          JOIN items i ON i.id = al.item_id
          JOIN platform_accounts a ON a.id = i.account_id
@@ -118,7 +134,11 @@ export function createRisingRouter() {
     );
 
     const rows = result.results ?? [];
+    const nowMs = Date.now();
+    const sevenDaysAgoIso = new Date(nowMs - 7 * 86_400_000).toISOString();
     const snapshotsByItem = new Map<string, number[]>();
+    const baselineByAccountKind = new Map<string, number>();
+
     for (const r of rows) {
       const snaps = await c.env.DB.prepare(
         'SELECT views FROM item_stats WHERE item_id = ? ORDER BY captured_at ASC LIMIT 24',
@@ -129,14 +149,29 @@ export function createRisingRouter() {
         r.item_id,
         (snaps.results ?? []).map((s) => s.views),
       );
+
+      const bkKey = `${r.account_id}:${r.kind}`;
+      if (!baselineByAccountKind.has(bkKey)) {
+        const bRow = await c.env.DB.prepare(
+          `SELECT COUNT(*) AS cnt FROM items
+           WHERE account_id = ? AND kind = ? AND published_at < ?`,
+        )
+          .bind(r.account_id, r.kind, sevenDaysAgoIso)
+          .first<{ cnt: number }>();
+        baselineByAccountKind.set(bkKey, bRow?.cnt ?? 0);
+      }
     }
 
-    const nowMs = Date.now();
     const hasYtApiKey = Boolean(c.env.YOUTUBE_API_KEY);
     const items: RisingItem[] = rows.map((r) => {
       const ev = parseEvidence(r.evidence_json);
       const createdMs = Date.parse(r.created_at);
       const snaps = snapshotsByItem.get(r.item_id) ?? [];
+      const baselineN =
+        ev.baselineN ??
+        baselineByAccountKind.get(`${r.account_id}:${r.kind}`) ??
+        0;
+      const paceLabel = toPaceLabel(r.type, baselineN);
       const parsedClaim = r.claim_status
         ? claimStatusSchema.safeParse(r.claim_status)
         : null;
@@ -165,10 +200,16 @@ export function createRisingRouter() {
         publishedAt: r.published_at,
         isBackfill: r.is_backfill === 1,
         tier: r.type,
+        paceLabel,
+        baselineN,
+        baselineRequired: BASELINE_REQUIRED,
         score: r.score,
         velocityRatio: ev.velocityRatio,
         engagementRatio: ev.engagementRatio,
-        reason: r.reason,
+        reason:
+          baselineN < BASELINE_REQUIRED
+            ? `Unscored — collecting baseline (${baselineN}/${BASELINE_REQUIRED})`
+            : r.reason,
         snapshotCount: snaps.length,
         snapshots: snaps.length >= 3 ? snaps : undefined,
         claim,
